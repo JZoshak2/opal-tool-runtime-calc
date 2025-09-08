@@ -32,10 +32,16 @@ function processMarkdownTableEnhanced(lines, startIndex, mode) {
     let currentIndex = startIndex;
     // Parse header row
     const headerLine = lines[currentIndex].trim();
-    const headers = headerLine
-        .split("|")
-        .map((h) => h.trim())
-        .filter((h) => h);
+    const headerCells = headerLine.split("|").map((h) => h.trim());
+    // Remove leading and trailing empty cells (from | at start/end of line)
+    // but preserve empty cells in the middle
+    let startIdx = 0;
+    let endIdx = headerCells.length;
+    if (headerCells[0] === "")
+        startIdx = 1;
+    if (headerCells[headerCells.length - 1] === "")
+        endIdx = headerCells.length - 1;
+    const headers = headerCells.slice(startIdx, endIdx);
     currentIndex++;
     // Skip separator row
     currentIndex++;
@@ -45,10 +51,16 @@ function processMarkdownTableEnhanced(lines, startIndex, mode) {
         const line = lines[currentIndex].trim();
         if (!line || !line.includes("|"))
             break;
-        const cells = line
-            .split("|")
-            .map((c) => c.trim())
-            .filter((c) => c !== "");
+        const rowCells = line.split("|").map((c) => c.trim());
+        // Remove leading and trailing empty cells (from | at start/end of line)
+        // but preserve empty cells in the middle
+        let startIdx = 0;
+        let endIdx = rowCells.length;
+        if (rowCells[0] === "")
+            startIdx = 1;
+        if (rowCells[rowCells.length - 1] === "")
+            endIdx = rowCells.length - 1;
+        const cells = rowCells.slice(startIdx, endIdx);
         if (cells.length > 0) {
             dataRows.push(cells);
         }
