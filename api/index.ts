@@ -518,7 +518,7 @@ tool({
 tool({
   name: "list_experiments",
   description:
-    "Lists all experiments in an Optimizely Web Experimentation project with readable formatting.",
+    "Lists experiments in an Optimizely Web Experimentation project with readable formatting. By default, excludes archived experiments (status='archived'). Set excludeArchived=false to include archived experiments.",
   parameters: [
     {
       name: "projectId",
@@ -527,9 +527,9 @@ tool({
       required: true,
     },
     {
-      name: "archived",
+      name: "excludeArchived",
       type: ParameterType.Boolean,
-      description: "Filter by archived status (optional). Set to false to exclude archived experiments.",
+      description: "If true (default), excludes archived experiments from the results. Set to false to include archived experiments.",
       required: false,
     },
     {

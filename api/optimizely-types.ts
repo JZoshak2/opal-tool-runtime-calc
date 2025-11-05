@@ -145,7 +145,7 @@ export interface ListExperimentsParams {
   status?: "not_started" | "running" | "paused" | "archived";
   page?: number;
   per_page?: number;
-  archived?: boolean;
+  excludeArchived?: boolean; // If true (default), excludes archived experiments by filtering on status !== "archived"
 }
 //please lort 22
 

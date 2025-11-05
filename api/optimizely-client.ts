@@ -169,7 +169,6 @@ export class OptimizelyClient {
       page?: number;
       per_page?: number;
       include_classic?: boolean;
-      archived?: boolean;
     } = {}
   ): Promise<OptimizelyExperiment[]> {
     const params = new URLSearchParams();
@@ -185,12 +184,6 @@ export class OptimizelyClient {
       console.log(`DEBUG: Adding include_classic=${options.include_classic}`);
     } else {
       console.log(`DEBUG: Not adding include_classic parameter (undefined)`);
-    }
-
-    // Add archived parameter if explicitly set
-    if (options.archived !== undefined) {
-      params.append("archived", options.archived.toString());
-      console.log(`DEBUG: Adding archived=${options.archived}`);
     }
 
     const url = `/experiments?${params.toString()}`;

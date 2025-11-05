@@ -114,24 +114,30 @@ export async function listExperiments(
     console.log(
       `DEBUG: Making request to: /experiments?project_id=${projectId}&per_page=${
         params.per_page || 50
-      } (no include_classic parameter)`
+      }`
     );
 
     const listOptions: {
       page?: number;
       per_page?: number;
-      archived?: boolean;
     } = {
       page: params.page,
       per_page: params.per_page || 50,
     };
     
-    // Only include archived if explicitly set
-    if (params.archived !== undefined) {
-      listOptions.archived = params.archived;
-    }
+    // Fetch all experiments from the API
+    const allExperiments = await client.listExperiments(projectId, listOptions);
     
-    const experiments = await client.listExperiments(projectId, listOptions);
+    // Filter out archived experiments by default (excludeArchived defaults to true)
+    // Archived experiments have status === "archived"
+    const excludeArchived = params.excludeArchived ?? true; // Default to true if not specified
+    const experiments = excludeArchived
+      ? allExperiments.filter((exp) => exp.status !== "archived")
+      : allExperiments;
+    
+    console.log(
+      `DEBUG: Fetched ${allExperiments.length} total experiments, ${excludeArchived ? `filtered to ${experiments.length} non-archived` : "showing all"}`
+    );
 
     return {
       project_id: projectId,
