@@ -169,6 +169,7 @@ export class OptimizelyClient {
       page?: number;
       per_page?: number;
       include_classic?: boolean;
+      archived?: boolean;
     } = {}
   ): Promise<OptimizelyExperiment[]> {
     const params = new URLSearchParams();

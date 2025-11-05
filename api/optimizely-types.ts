@@ -145,6 +145,7 @@ export interface ListExperimentsParams {
   status?: "not_started" | "running" | "paused" | "archived";
   page?: number;
   per_page?: number;
+  archived?: boolean;
 }
 
 export interface ListAudiencesParams {

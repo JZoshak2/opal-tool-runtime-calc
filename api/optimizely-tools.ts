@@ -121,6 +121,7 @@ export async function listExperiments(
       page: params.page,
       per_page: params.per_page || 50,
       // Removed include_classic parameter entirely
+      archived: params.archived || false,
     });
 
     return {
