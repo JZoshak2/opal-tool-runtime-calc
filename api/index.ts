@@ -552,26 +552,28 @@ tool({
 
 tool({
   name: "search_experiments",
-  description: `🔍 EXPERIMENT SEARCH - Find experiments by name using the Search API
+  description: `🔍 EXPERIMENT SEARCH - Find experiments using the Optimizely Search API
 
 📋 SEARCH CAPABILITIES:
-• Text search across experiment names (optional - omit to list all)
+• Text search across experiment names (optional - uses blank query to return all)
+• Automatically paginates through all pages to return complete results
 • Filter by status (running, paused, not_started, concluded, archived)
-• Filter by archived status
-• Pagination support for large result sets
+• Filter by archived status (passed to API for server-side filtering)
+• Uses search API endpoint which handles blank queries natively
 
 🎯 USE CASES:
 • Find experiments matching specific keywords
 • Locate experiments by partial name match
-• List all experiments with status/archived filters
+• List all experiments with status/archived filters (omit query parameter)
 • Search across multiple projects (call once per project)
 • Discover experiments without knowing exact names
 
 💡 TIPS:
-• Omit query parameter to list all experiments in project
+• Omit query parameter to list all experiments (uses blank query)
 • Search is case-insensitive when query is provided
 • Use broad terms to find more results
 • Combine with status filters to narrow results
+• Automatically fetches all pages unless page parameter is specified
 • Returns same format as list_experiments`,
   parameters: [
     {
@@ -584,33 +586,33 @@ tool({
       name: "query",
       type: ParameterType.String,
       description:
-        "The search query to match against experiment names (optional - omit to list all experiments)",
+        "The search query to match against experiment names (optional - omit or leave blank to return all experiments using search API)",
       required: false,
     },
     {
       name: "status",
       type: ParameterType.String,
       description:
-        "Filter by experiment status: 'not_started', 'running', 'paused', 'archived', or 'concluded' (optional)",
+        "Filter by experiment status: 'not_started', 'running', 'paused', 'archived', or 'concluded' (optional, applied client-side)",
       required: false,
     },
     {
       name: "archived",
       type: ParameterType.Boolean,
       description:
-        "Filter by archived status - true for archived only, false for non-archived only (optional)",
+        "Filter by archived status - true for archived only, false for non-archived only (optional, passed to API)",
       required: false,
     },
     {
       name: "page",
       type: ParameterType.Number,
-      description: "Page number for pagination (optional)",
+      description: "Optional: Fetch only a specific page number. If omitted, fetches all pages automatically.",
       required: false,
     },
     {
       name: "per_page",
       type: ParameterType.Number,
-      description: "Number of results per page (default: 50, max: 100)",
+      description: "Number of results per page (default: 50, max: 100). Used for pagination requests.",
       required: false,
     },
   ],

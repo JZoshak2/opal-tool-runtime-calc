@@ -348,20 +348,26 @@ export class OptimizelyClient {
   // Search methods
   async search(
     projectId: string,
-    query: string,
+    query: string | undefined,
     options: {
       type?: string;
       page?: number;
       per_page?: number;
+      archived?: boolean;
     } = {}
   ): Promise<any[]> {
     const params = new URLSearchParams();
     params.append("project_id", projectId);
-    params.append("query", query);
+    // Always append query parameter, even if empty (blank query returns all results)
+    params.append("query", query || "");
     if (options.type) params.append("type", options.type);
     if (options.page) params.append("page", options.page.toString());
     if (options.per_page)
       params.append("per_page", options.per_page.toString());
+    // Add archived parameter if specified
+    if (options.archived !== undefined) {
+      params.append("archived", options.archived.toString());
+    }
 
     const url = `/search?${params.toString()}`;
     console.log(`DEBUG: Making search request to: ${url}`);

@@ -224,7 +224,8 @@ export async function listExperiments(
 /**
  * Search Experiments Tool
  * Searches for experiments by name in a project using the Search API.
- * If no query is provided, falls back to listing all experiments.
+ * If no query is provided, uses blank query parameter to return all experiments.
+ * Automatically paginates through all pages to return complete results.
  */
 export async function searchExperiments(
   params: SearchExperimentsParams
@@ -233,77 +234,71 @@ export async function searchExperiments(
   const { query, status, archived } = params;
   const client = getOptimizelyClient();
 
-  // If no query provided, fall back to listExperiments
-  if (!query || query.trim() === "") {
-    console.log(
-      `DEBUG: No search query provided, falling back to listExperiments for project ${projectId}`
-    );
-
-    const experiments = await client.listExperiments(projectId, {
-      page: params.page,
-      per_page: params.per_page || 50,
-      archived: archived,
-    });
-
-    // Apply status filter if provided
-    let filteredResults = experiments;
-    if (status !== undefined) {
-      filteredResults = filteredResults.filter((exp) => exp.status === status);
-      console.log(
-        `DEBUG: After status filter (${status}): ${filteredResults.length} results`
-      );
-    }
-
-    return {
-      project_id: projectId,
-      total_count: filteredResults.length,
-      experiments: filteredResults.map((exp) => ({
-        id: String(exp.id),
-        name: exp.name,
-        status: exp.status,
-        type: exp.type,
-        created: formatDate(exp.created),
-        last_modified: formatDate(exp.last_modified),
-        description: exp.description,
-        traffic_allocation: exp.traffic_allocation,
-        holdback: exp.holdback,
-        variations_count: exp.variations?.length || 0,
-        campaign_id: exp.campaign_id,
-      })),
-    };
-  }
+  // Normalize query: use empty string if not provided or blank
+  const searchQuery = query?.trim() || "";
+  const searchQueryDisplay = searchQuery || "(blank - all experiments)";
 
   try {
     console.log(
-      `DEBUG: Searching experiments for project ${projectId} with query "${query}"`
+      `DEBUG: Searching experiments for project ${projectId} with query "${searchQueryDisplay}"`
     );
 
-    const searchResults = await client.search(projectId, query, {
-      type: "experiment",
-      page: params.page,
-      per_page: params.per_page || 50,
-    });
+    // Paginate through all search results
+    const perPage = params.per_page || 50;
+    const allResults: OptimizelyExperiment[] = [];
+    const startPage = params.page || 1;
+    let currentPage = startPage;
+    const fetchSinglePage = params.page !== undefined;
+    let hasMorePages = true;
 
     console.log(
-      `DEBUG: Search returned ${searchResults.length} results before filtering`
+      `DEBUG: Starting pagination - fetching ${fetchSinglePage ? 'single' : 'all'} search results`
     );
 
-    // Apply status and archived filters client-side since search API may not support them
-    let filteredResults = searchResults as OptimizelyExperiment[];
+    while (hasMorePages) {
+      console.log(`DEBUG: Fetching search page ${currentPage} with ${perPage} per page`);
 
+      const pageResults = await client.search(projectId, searchQuery, {
+        type: "experiment",
+        page: currentPage,
+        per_page: perPage,
+        archived: archived !== undefined ? archived : false, // Pass archived to API
+      });
+
+      console.log(
+        `DEBUG: Search page ${currentPage} returned ${pageResults.length} results`
+      );
+
+      // Add results from this page to our collection
+      allResults.push(...(pageResults as OptimizelyExperiment[]));
+
+      // If fetching a single page, stop after first iteration
+      if (fetchSinglePage) {
+        hasMorePages = false;
+        console.log(`DEBUG: Single page requested (page ${startPage}), stopping pagination`);
+      } else {
+        // Check if we've reached the last page
+        if (pageResults.length < perPage) {
+          hasMorePages = false;
+          console.log(
+            `DEBUG: Last page reached (got ${pageResults.length} < ${perPage})`
+          );
+        } else {
+          currentPage++;
+        }
+      }
+    }
+
+    console.log(
+      `DEBUG: Collected ${allResults.length} total search results across ${currentPage} page(s)`
+    );
+
+    // Apply status filter client-side if provided (API may not support status filter)
+    let filteredResults = allResults;
     if (status !== undefined) {
       filteredResults = filteredResults.filter((exp) => exp.status === status);
       console.log(
         `DEBUG: After status filter (${status}): ${filteredResults.length} results`
-      );
-    }
-
-    if (archived !== undefined) {
-      filteredResults = filteredResults.filter((exp) =>
-        archived ? exp.status === "archived" : exp.status !== "archived"
-      );
-      console.log(
-        `DEBUG: After archived filter (${archived}): ${filteredResults.length} results`
       );
     }
 
@@ -334,7 +329,7 @@ export async function searchExperiments(
         );
       } else if (error.status === 404) {
         throw new Error(
-          `No experiments found matching query "${query}" in project ${projectId}. The search endpoint returned 404.`
+          `No experiments found matching query "${searchQueryDisplay}" in project ${projectId}. The search endpoint returned 404.`
         );
       } else if (error.status === 401) {
         throw new Error(
