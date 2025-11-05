@@ -112,23 +112,70 @@ export async function listExperiments(
       // Continue anyway - the project endpoint might have different permissions
     }
 
+    // Paginate through all experiments
+    const perPage = params.per_page || 50;
+    const allExperiments: OptimizelyExperiment[] = [];
+    const startPage = params.page || 1;
+    let currentPage = startPage;
+    const fetchSinglePage = params.page !== undefined; // If page is specified, only fetch that page
+    let hasMorePages = true;
+
     console.log(
-      `DEBUG: Making request to: /experiments?project_id=${projectId}&per_page=${
-        params.per_page || 50
-      } (no include_classic parameter)`
+      `DEBUG: Starting pagination - fetching ${fetchSinglePage ? 'single' : 'all'} experiments for project ${projectId}`
     );
 
-    const experiments = await client.listExperiments(projectId, {
-      page: params.page,
-      per_page: params.per_page || 50,
-      archived: params.archived || false,
-      // Removed include_classic parameter entirely
-    });
+    while (hasMorePages) {
+      console.log(`DEBUG: Fetching page ${currentPage} with ${perPage} per page`);
+
+      const pageExperiments = await client.listExperiments(projectId, {
+        page: currentPage,
+        per_page: perPage,
+        // Don't filter archived at API level - we'll do it client-side to ensure we get all pages
+      });
+
+      console.log(
+        `DEBUG: Page ${currentPage} returned ${pageExperiments.length} experiments`
+      );
+
+      // Add experiments from this page to our collection
+      allExperiments.push(...pageExperiments);
+
+      // If fetching a single page, stop after first iteration
+      if (fetchSinglePage) {
+        hasMorePages = false;
+        console.log(`DEBUG: Single page requested (page ${startPage}), stopping pagination`);
+      } else {
+        // Check if we've reached the last page
+        // If we got fewer results than per_page, we're on the last page
+        if (pageExperiments.length < perPage) {
+          hasMorePages = false;
+          console.log(
+            `DEBUG: Last page reached (got ${pageExperiments.length} < ${perPage})`
+          );
+        } else {
+          currentPage++;
+        }
+      }
+    }
+
+    console.log(
+      `DEBUG: Collected ${allExperiments.length} total experiments across ${currentPage} page(s)`
+    );
+
+    // Filter out archived experiments client-side if archived=false or not specified
+    const shouldIncludeArchived = params.archived === true;
+    const filteredExperiments = shouldIncludeArchived
+      ? allExperiments
+      : allExperiments.filter((exp) => exp.status !== "archived");
+
+    console.log(
+      `DEBUG: After filtering (archived=${params.archived}): ${filteredExperiments.length} experiments`
+    );
 
     return {
       project_id: projectId,
-      total_count: experiments.length,
-      experiments: experiments.map((exp) => ({
+      total_count: filteredExperiments.length,
+      experiments: filteredExperiments.map((exp) => ({
         id: String(exp.id), // Ensure ID is handled as string to prevent precision loss
         name: exp.name,
         status: exp.status,

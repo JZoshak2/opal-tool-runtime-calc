@@ -521,7 +521,7 @@ tool({
 tool({
   name: "list_experiments",
   description:
-    "Lists all experiments in an Optimizely Web Experimentation project with readable formatting.",
+    "Lists all experiments in an Optimizely Web Experimentation project with readable formatting. Automatically paginates through all pages to return complete results. By default, excludes archived experiments unless archived=true is specified.",
   parameters: [
     {
       name: "projectId",
@@ -532,13 +532,19 @@ tool({
     {
       name: "page",
       type: ParameterType.Number,
-      description: "Page number for pagination (optional)",
+      description: "Optional: Fetch only a specific page number. If omitted, fetches all pages automatically.",
       required: false,
     },
     {
       name: "per_page",
       type: ParameterType.Number,
-      description: "Number of results per page (default: 50, max: 100)",
+      description: "Number of results per page (default: 50, max: 100). Used for pagination requests.",
+      required: false,
+    },
+    {
+      name: "archived",
+      type: ParameterType.Boolean,
+      description: "If true, includes archived experiments. If false or omitted, excludes archived experiments.",
       required: false,
     },
   ],
