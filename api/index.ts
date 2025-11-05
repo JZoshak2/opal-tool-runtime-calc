@@ -27,6 +27,7 @@ import type {
 // Optimizely Web Experimentation Tools
 import {
   listExperiments,
+  searchExperiments,
   getExperiment,
   listAudiences,
   getAudience,
@@ -41,6 +42,7 @@ import {
 } from "./optimizely-tools";
 import type {
   ListExperimentsParams,
+  SearchExperimentsParams,
   GetExperimentParams,
   ListAudiencesParams,
   GetAudienceParams,
@@ -62,7 +64,7 @@ app.use(express.json()); // Add JSON middleware
 app.use(
   "/pdfs",
   express.static("/tmp", {
-    setHeaders: (res: express.Response, path: string) => {
+    setHeaders: (res, path) => {
       if (path.endsWith(".pdf")) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", "inline");
@@ -82,7 +84,7 @@ setInterval(() => {
 }, 60 * 60 * 1000); // 1 hour in milliseconds
 
 // Add a root route to provide a status message.
-app.get("/", (req: express.Request, res: express.Response) => {
+app.get("/", (req, res) => {
   res.send("Opal tool server is running. Visit /discovery for tool discovery.");
 });
 
@@ -343,7 +345,8 @@ tool({
     {
       name: "project",
       type: ParameterType.String,
-      description: "The project key where the issue should be created (defaults to 'DHK')",
+      description:
+        "The project key where the issue should be created (defaults to 'DHK')",
       required: false,
     },
     {
@@ -518,19 +521,13 @@ tool({
 tool({
   name: "list_experiments",
   description:
-    "Lists experiments in an Optimizely Web Experimentation project with readable formatting. By default, excludes archived experiments (status='archived'). Set excludeArchived=false to include archived experiments.",
+    "Lists all experiments in an Optimizely Web Experimentation project with readable formatting.",
   parameters: [
     {
       name: "projectId",
       type: ParameterType.String,
       description: "The Optimizely project ID",
       required: true,
-    },
-    {
-      name: "excludeArchived",
-      type: ParameterType.Boolean,
-      description: "If true (default), excludes archived experiments from the results. Set to false to include archived experiments.",
-      required: false,
     },
     {
       name: "page",
@@ -546,6 +543,72 @@ tool({
     },
   ],
 })(listExperiments);
+
+tool({
+  name: "search_experiments",
+  description: `🔍 EXPERIMENT SEARCH - Find experiments by name using the Search API
+
+📋 SEARCH CAPABILITIES:
+• Text search across experiment names (optional - omit to list all)
+• Filter by status (running, paused, not_started, concluded, archived)
+• Filter by archived status
+• Pagination support for large result sets
+
+🎯 USE CASES:
+• Find experiments matching specific keywords
+• Locate experiments by partial name match
+• List all experiments with status/archived filters
+• Search across multiple projects (call once per project)
+• Discover experiments without knowing exact names
+
+💡 TIPS:
+• Omit query parameter to list all experiments in project
+• Search is case-insensitive when query is provided
+• Use broad terms to find more results
+• Combine with status filters to narrow results
+• Returns same format as list_experiments`,
+  parameters: [
+    {
+      name: "projectId",
+      type: ParameterType.String,
+      description: "The Optimizely project ID to search within",
+      required: true,
+    },
+    {
+      name: "query",
+      type: ParameterType.String,
+      description:
+        "The search query to match against experiment names (optional - omit to list all experiments)",
+      required: false,
+    },
+    {
+      name: "status",
+      type: ParameterType.String,
+      description:
+        "Filter by experiment status: 'not_started', 'running', 'paused', 'archived', or 'concluded' (optional)",
+      required: false,
+    },
+    {
+      name: "archived",
+      type: ParameterType.Boolean,
+      description:
+        "Filter by archived status - true for archived only, false for non-archived only (optional)",
+      required: false,
+    },
+    {
+      name: "page",
+      type: ParameterType.Number,
+      description: "Page number for pagination (optional)",
+      required: false,
+    },
+    {
+      name: "per_page",
+      type: ParameterType.Number,
+      description: "Number of results per page (default: 50, max: 100)",
+      required: false,
+    },
+  ],
+})(searchExperiments);
 
 tool({
   name: "get_experiment",
@@ -905,7 +968,7 @@ tool({
 })(getProjectOverview);
 
 if (bearerToken) {
-  app.use("/tools/calculateRuntime", (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  app.use("/tools/calculateRuntime", (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || authHeader !== `Bearer ${bearerToken}`) {
       return res.status(401).send("Unauthorized");

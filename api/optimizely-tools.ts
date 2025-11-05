@@ -4,6 +4,7 @@ import {
 } from "./optimizely-client";
 import type {
   ListExperimentsParams,
+  SearchExperimentsParams,
   ListAudiencesParams,
   ListPagesParams,
   ListEventsParams,
@@ -111,111 +112,36 @@ export async function listExperiments(
       // Continue anyway - the project endpoint might have different permissions
     }
 
-    const excludeArchived = params.excludeArchived ?? true; // Default to true if not specified
-    const requestedPerPage = params.per_page || 50;
-    const requestedPage = params.page || 1;
-    
-    let allExperiments: OptimizelyExperiment[] = [];
-    let currentPage = requestedPage;
-    let hasMorePages = true;
-    const maxPagesToFetch = 10; // Safety limit to prevent infinite loops
-    
-    // If excluding archived and no specific page requested, fetch multiple pages to get enough non-archived experiments
-    if (excludeArchived && !params.page) {
-      console.log(
-        `DEBUG: Fetching multiple pages to collect non-archived experiments (target: ${requestedPerPage} experiments)`
-      );
-      
-      let nonArchivedCount = 0;
-      
-      while (nonArchivedCount < requestedPerPage && hasMorePages && currentPage <= maxPagesToFetch) {
-        console.log(`DEBUG: Fetching page ${currentPage}...`);
-        const pageExperiments = await client.listExperiments(projectId, {
-          page: currentPage,
-          per_page: 100, // Use max per_page to minimize API calls
-        });
-        
-        if (pageExperiments.length === 0) {
-          hasMorePages = false;
-        } else {
-          allExperiments = allExperiments.concat(pageExperiments);
-          // Count non-archived experiments by checking the new ones we just added
-          const newNonArchived = pageExperiments.filter((exp) => exp.status !== "archived").length;
-          nonArchivedCount += newNonArchived;
-          currentPage++;
-        }
-      }
-      
-      // Filter out archived experiments
-      const nonArchivedExperiments = allExperiments.filter((exp) => exp.status !== "archived");
-      
-      // Limit to requested number
-      const experiments = nonArchivedExperiments.slice(0, requestedPerPage);
-      
-      console.log(
-        `DEBUG: Fetched ${allExperiments.length} total experiments across ${currentPage - 1} pages, filtered to ${nonArchivedExperiments.length} non-archived, returning ${experiments.length}`
-      );
-      
-      return {
-        project_id: projectId,
-        total_count: experiments.length,
-        experiments: experiments.map((exp) => ({
-          id: String(exp.id),
-          name: exp.name,
-          status: exp.status,
-          type: exp.type,
-          created: formatDate(exp.created),
-          last_modified: formatDate(exp.last_modified),
-          description: exp.description,
-          traffic_allocation: exp.traffic_allocation,
-          holdback: exp.holdback,
-          variations_count: exp.variations?.length || 0,
-          campaign_id: exp.campaign_id,
-        })),
-      };
-    } else {
-      // For specific page requests or when including archived, use normal pagination
-      console.log(
-        `DEBUG: Making request to: /experiments?project_id=${projectId}&per_page=${requestedPerPage}&page=${requestedPage}`
-      );
-      
-      const listOptions: {
-        page?: number;
-        per_page?: number;
-      } = {
-        page: requestedPage,
-        per_page: requestedPerPage,
-      };
-      
-      const fetchedExperiments = await client.listExperiments(projectId, listOptions);
-      
-      // Filter out archived experiments if requested
-      const experiments = excludeArchived
-        ? fetchedExperiments.filter((exp) => exp.status !== "archived")
-        : fetchedExperiments;
-      
-      console.log(
-        `DEBUG: Fetched ${fetchedExperiments.length} total experiments, ${excludeArchived ? `filtered to ${experiments.length} non-archived` : "showing all"}`
-      );
-      
-      return {
-        project_id: projectId,
-        total_count: experiments.length,
-        experiments: experiments.map((exp) => ({
-          id: String(exp.id),
-          name: exp.name,
-          status: exp.status,
-          type: exp.type,
-          created: formatDate(exp.created),
-          last_modified: formatDate(exp.last_modified),
-          description: exp.description,
-          traffic_allocation: exp.traffic_allocation,
-          holdback: exp.holdback,
-          variations_count: exp.variations?.length || 0,
-          campaign_id: exp.campaign_id,
-        })),
-      };
-    }
+    console.log(
+      `DEBUG: Making request to: /experiments?project_id=${projectId}&per_page=${
+        params.per_page || 50
+      } (no include_classic parameter)`
+    );
+
+    const experiments = await client.listExperiments(projectId, {
+      page: params.page,
+      per_page: params.per_page || 50,
+      archived: params.archived || false,
+      // Removed include_classic parameter entirely
+    });
+
+    return {
+      project_id: projectId,
+      total_count: experiments.length,
+      experiments: experiments.map((exp) => ({
+        id: String(exp.id), // Ensure ID is handled as string to prevent precision loss
+        name: exp.name,
+        status: exp.status,
+        type: exp.type,
+        created: formatDate(exp.created),
+        last_modified: formatDate(exp.last_modified),
+        description: exp.description,
+        traffic_allocation: exp.traffic_allocation,
+        holdback: exp.holdback,
+        variations_count: exp.variations?.length || 0,
+        campaign_id: exp.campaign_id,
+      })),
+    };
   } catch (error) {
     if (error instanceof OptimizelyClientError) {
       // Provide more specific error messages based on status code
@@ -242,6 +168,140 @@ export async function listExperiments(
     }
     throw new Error(
       `Unexpected error listing experiments: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  }
+}
+
+/**
+ * Search Experiments Tool
+ * Searches for experiments by name in a project using the Search API.
+ * If no query is provided, falls back to listing all experiments.
+ */
+export async function searchExperiments(
+  params: SearchExperimentsParams
+): Promise<FormattedExperimentList> {
+  const projectId = getProjectId(params);
+  const { query, status, archived } = params;
+  const client = getOptimizelyClient();
+
+  // If no query provided, fall back to listExperiments
+  if (!query || query.trim() === "") {
+    console.log(
+      `DEBUG: No search query provided, falling back to listExperiments for project ${projectId}`
+    );
+
+    const experiments = await client.listExperiments(projectId, {
+      page: params.page,
+      per_page: params.per_page || 50,
+      archived: archived,
+    });
+
+    // Apply status filter if provided
+    let filteredResults = experiments;
+    if (status !== undefined) {
+      filteredResults = filteredResults.filter((exp) => exp.status === status);
+      console.log(
+        `DEBUG: After status filter (${status}): ${filteredResults.length} results`
+      );
+    }
+
+    return {
+      project_id: projectId,
+      total_count: filteredResults.length,
+      experiments: filteredResults.map((exp) => ({
+        id: String(exp.id),
+        name: exp.name,
+        status: exp.status,
+        type: exp.type,
+        created: formatDate(exp.created),
+        last_modified: formatDate(exp.last_modified),
+        description: exp.description,
+        traffic_allocation: exp.traffic_allocation,
+        holdback: exp.holdback,
+        variations_count: exp.variations?.length || 0,
+        campaign_id: exp.campaign_id,
+      })),
+    };
+  }
+
+  try {
+    console.log(
+      `DEBUG: Searching experiments for project ${projectId} with query "${query}"`
+    );
+
+    const searchResults = await client.search(projectId, query, {
+      type: "experiment",
+      page: params.page,
+      per_page: params.per_page || 50,
+    });
+
+    console.log(
+      `DEBUG: Search returned ${searchResults.length} results before filtering`
+    );
+
+    // Apply status and archived filters client-side since search API may not support them
+    let filteredResults = searchResults as OptimizelyExperiment[];
+
+    if (status !== undefined) {
+      filteredResults = filteredResults.filter((exp) => exp.status === status);
+      console.log(
+        `DEBUG: After status filter (${status}): ${filteredResults.length} results`
+      );
+    }
+
+    if (archived !== undefined) {
+      filteredResults = filteredResults.filter((exp) =>
+        archived ? exp.status === "archived" : exp.status !== "archived"
+      );
+      console.log(
+        `DEBUG: After archived filter (${archived}): ${filteredResults.length} results`
+      );
+    }
+
+    return {
+      project_id: projectId,
+      total_count: filteredResults.length,
+      experiments: filteredResults.map((exp) => ({
+        id: String(exp.id),
+        name: exp.name,
+        status: exp.status,
+        type: exp.type,
+        created: formatDate(exp.created),
+        last_modified: formatDate(exp.last_modified),
+        description: exp.description,
+        traffic_allocation: exp.traffic_allocation,
+        holdback: exp.holdback,
+        variations_count: exp.variations?.length || 0,
+        campaign_id: exp.campaign_id,
+      })),
+    };
+  } catch (error) {
+    if (error instanceof OptimizelyClientError) {
+      if (error.status === 400) {
+        throw new Error(
+          `Bad request when searching experiments for project ${projectId}. This could indicate: 1) The project ID format is incorrect, 2) The project ID doesn't exist, 3) Your API token doesn't have access to this project, or 4) The search query is malformed. Please verify the project ID and query are correct. API Error: ${
+            error.message
+          } ${error.details ? `(${JSON.stringify(error.details)})` : ""}`
+        );
+      } else if (error.status === 404) {
+        throw new Error(
+          `No experiments found matching query "${query}" in project ${projectId}. The search endpoint returned 404.`
+        );
+      } else if (error.status === 401) {
+        throw new Error(
+          `Authentication failed. Please check your OPTIMIZELY_API_TOKEN.`
+        );
+      } else if (error.status === 403) {
+        throw new Error(
+          `Access forbidden to project ${projectId}. Your API token may not have the required permissions.`
+        );
+      }
+      throw new Error(`Failed to search experiments: ${error.message}`);
+    }
+    throw new Error(
+      `Unexpected error searching experiments: ${
         error instanceof Error ? error.message : "Unknown error"
       }`
     );
@@ -683,19 +743,25 @@ export async function listEvents(
 
   try {
     console.log(`DEBUG: listEvents called with params:`, params);
-    
+
     const events = await client.listEvents(projectId, {
       page: params.page,
       per_page: params.per_page || 50,
       // Removed include_classic parameter to match API format
     });
 
-    console.log(`DEBUG: Raw events from API (${events.length} total):`, JSON.stringify(events, null, 2));
+    console.log(
+      `DEBUG: Raw events from API (${events.length} total):`,
+      JSON.stringify(events, null, 2)
+    );
 
     // Always exclude archived events
     const filteredEvents = events.filter((event) => !event.archived);
 
-    console.log(`DEBUG: Filtered events (${filteredEvents.length} after filtering):`, JSON.stringify(filteredEvents, null, 2));
+    console.log(
+      `DEBUG: Filtered events (${filteredEvents.length} after filtering):`,
+      JSON.stringify(filteredEvents, null, 2)
+    );
 
     const result = {
       project_id: projectId,
@@ -711,7 +777,10 @@ export async function listEvents(
       })),
     };
 
-    console.log(`DEBUG: Final formatted result:`, JSON.stringify(result, null, 2));
+    console.log(
+      `DEBUG: Final formatted result:`,
+      JSON.stringify(result, null, 2)
+    );
 
     return result;
   } catch (error) {
@@ -1111,7 +1180,7 @@ export async function createExperiment(
       audience_conditions: audience_conditions || "everyone",
       variations: variations?.map((variation, index) => {
         const percentageWeight =
-          variation.weight || 100 / (variations?.length || 1);
+          variation.weight || 100 / (variations.length || 1);
         const basisPointWeight = percentageWeight * 100;
         console.log(
           `DEBUG: Converting variation "${variation.name}" weight from ${percentageWeight}% to ${basisPointWeight} basis points`
@@ -1430,18 +1499,25 @@ export async function getProjectOverview(
     );
 
     // Fetch all entity types in parallel for better performance
-    const [rawExperiments, rawAudiences, rawEvents, rawPages] = await Promise.all([
-      client.listExperiments(projectId, { per_page: 100 }),
-      client.listAudiences(projectId, { per_page: 100 }),
-      client.listEvents(projectId, { per_page: 100 }),
-      client.listPages(projectId, { per_page: 100 }).catch(() => []), // Pages might not exist for all projects
-    ]);
+    const [rawExperiments, rawAudiences, rawEvents, rawPages] =
+      await Promise.all([
+        client.listExperiments(projectId, { per_page: 100 }),
+        client.listAudiences(projectId, { per_page: 100 }),
+        client.listEvents(projectId, { per_page: 100 }),
+        client.listPages(projectId, { per_page: 100 }).catch(() => []), // Pages might not exist for all projects
+      ]);
 
     // Apply archived filtering if include_archived is not explicitly true
     const experiments = rawExperiments;
-    const audiences = params.include_archived ? rawAudiences : rawAudiences.filter((aud) => !aud.archived);
-    const events = params.include_archived ? rawEvents : rawEvents.filter((event) => !event.archived);
-    const pages = params.include_archived ? rawPages : rawPages.filter((page) => !page.archived);
+    const audiences = params.include_archived
+      ? rawAudiences
+      : rawAudiences.filter((aud) => !aud.archived);
+    const events = params.include_archived
+      ? rawEvents
+      : rawEvents.filter((event) => !event.archived);
+    const pages = params.include_archived
+      ? rawPages
+      : rawPages.filter((page) => !page.archived);
 
     console.log(
       `DEBUG: Retrieved ${experiments.length} experiments, ${audiences.length} audiences, ${events.length} events, ${pages.length} pages`

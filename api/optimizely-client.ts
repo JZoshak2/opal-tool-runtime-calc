@@ -8,8 +8,7 @@ import type {
   OptimizelyExperimentResults,
   OptimizelyAPIError,
 } from "./optimizely-types";
-// hiiiiiiiiiiiieeee
-//test comment 423
+
 /**
  * Rate limiter for Optimizely API requests
  * Based on Optimizely's documented limits: 60 requests per minute
@@ -169,6 +168,7 @@ export class OptimizelyClient {
       page?: number;
       per_page?: number;
       include_classic?: boolean;
+      archived?: boolean;
     } = {}
   ): Promise<OptimizelyExperiment[]> {
     const params = new URLSearchParams();
@@ -343,6 +343,29 @@ export class OptimizelyClient {
     );
 
     return this.makeRequest<OptimizelyEvent>("GET", url);
+  }
+
+  // Search methods
+  async search(
+    projectId: string,
+    query: string,
+    options: {
+      type?: string;
+      page?: number;
+      per_page?: number;
+    } = {}
+  ): Promise<any[]> {
+    const params = new URLSearchParams();
+    params.append("project_id", projectId);
+    params.append("query", query);
+    if (options.type) params.append("type", options.type);
+    if (options.page) params.append("page", options.page.toString());
+    if (options.per_page)
+      params.append("per_page", options.per_page.toString());
+
+    const url = `/search?${params.toString()}`;
+    console.log(`DEBUG: Making search request to: ${url}`);
+    return this.makeRequest<any[]>("GET", url);
   }
 
   // Utility methods

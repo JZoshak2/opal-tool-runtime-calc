@@ -142,12 +142,20 @@ export interface OptimizelyVariationResults {
 // Request/Response types for our tools
 export interface ListExperimentsParams {
   projectId: string;
+  archived?: boolean;
   status?: "not_started" | "running" | "paused" | "archived";
   page?: number;
   per_page?: number;
-  excludeArchived?: boolean; // If true (default), excludes archived experiments by filtering on status !== "archived"
 }
-//please lort 22
+
+export interface SearchExperimentsParams {
+  projectId: string;
+  query?: string;
+  archived?: boolean;
+  status?: "not_started" | "running" | "paused" | "archived" | "concluded";
+  page?: number;
+  per_page?: number;
+}
 
 export interface ListAudiencesParams {
   projectId: string;
