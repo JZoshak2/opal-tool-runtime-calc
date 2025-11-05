@@ -26,8 +26,17 @@ export async function generatePdfFromMarkdown(
     console.log('Chromium executable path:', executablePath);
     
     // Read the Optimizely SVG logo
-    const logoPath = path.join(__dirname, 'assets', 'optimizely_logo.svg');
-    const logoSvg = await fs.readFile(logoPath, 'utf8');
+    // Use a workaround for __dirname in serverless environments
+    const logoPath = path.join(process.cwd(), 'api', 'assets', 'optimizely_logo.svg');
+    // Fallback: try reading from current directory if the above doesn't work
+    let logoSvg: string;
+    try {
+      logoSvg = await fs.readFile(logoPath, 'utf8');
+    } catch (error) {
+      // If logo file doesn't exist, use an empty string or a default SVG
+      console.warn('Could not read logo file, using default');
+      logoSvg = ''; // You can add a default SVG here if needed
+    }
 
     // Create custom CSS for professional document styling
     const customCSS = `
@@ -170,7 +179,7 @@ export async function cleanupExpiredPdfs(): Promise<void> {
   try {
     const tempDir = '/tmp';
     const files = await fs.readdir(tempDir);
-    const pdfFiles = files.filter(file => file.endsWith('.pdf') && file.includes('document-'));
+    const pdfFiles = files.filter((file: string) => file.endsWith('.pdf') && file.includes('document-'));
     
     const oneHourAgo = new Date();
     oneHourAgo.setHours(oneHourAgo.getHours() - 1);

@@ -117,12 +117,21 @@ export async function listExperiments(
       } (no include_classic parameter)`
     );
 
-    const experiments = await client.listExperiments(projectId, {
+    const listOptions: {
+      page?: number;
+      per_page?: number;
+      archived?: boolean;
+    } = {
       page: params.page,
       per_page: params.per_page || 50,
-      // Only include archived if explicitly set
-      ...(params.archived !== undefined && { archived: params.archived }),
-    });
+    };
+    
+    // Only include archived if explicitly set
+    if (params.archived !== undefined) {
+      listOptions.archived = params.archived;
+    }
+    
+    const experiments = await client.listExperiments(projectId, listOptions);
 
     return {
       project_id: projectId,
@@ -1036,7 +1045,7 @@ export async function createExperiment(
       audience_conditions: audience_conditions || "everyone",
       variations: variations?.map((variation, index) => {
         const percentageWeight =
-          variation.weight || 100 / (variations.length || 1);
+          variation.weight || 100 / (variations?.length || 1);
         const basisPointWeight = percentageWeight * 100;
         console.log(
           `DEBUG: Converting variation "${variation.name}" weight from ${percentageWeight}% to ${basisPointWeight} basis points`

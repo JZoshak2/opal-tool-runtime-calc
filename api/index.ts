@@ -62,7 +62,7 @@ app.use(express.json()); // Add JSON middleware
 app.use(
   "/pdfs",
   express.static("/tmp", {
-    setHeaders: (res, path) => {
+    setHeaders: (res: express.Response, path: string) => {
       if (path.endsWith(".pdf")) {
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", "inline");
@@ -82,7 +82,7 @@ setInterval(() => {
 }, 60 * 60 * 1000); // 1 hour in milliseconds
 
 // Add a root route to provide a status message.
-app.get("/", (req, res) => {
+app.get("/", (req: express.Request, res: express.Response) => {
   res.send("Opal tool server is running. Visit /discovery for tool discovery.");
 });
 
@@ -905,7 +905,7 @@ tool({
 })(getProjectOverview);
 
 if (bearerToken) {
-  app.use("/tools/calculateRuntime", (req, res, next) => {
+  app.use("/tools/calculateRuntime", (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || authHeader !== `Bearer ${bearerToken}`) {
       return res.status(401).send("Unauthorized");
