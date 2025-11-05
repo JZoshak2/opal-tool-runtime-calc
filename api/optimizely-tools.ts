@@ -111,51 +111,111 @@ export async function listExperiments(
       // Continue anyway - the project endpoint might have different permissions
     }
 
-    console.log(
-      `DEBUG: Making request to: /experiments?project_id=${projectId}&per_page=${
-        params.per_page || 50
-      }`
-    );
-
-    const listOptions: {
-      page?: number;
-      per_page?: number;
-    } = {
-      page: params.page,
-      per_page: params.per_page || 50,
-    };
-    
-    // Fetch all experiments from the API
-    const allExperiments = await client.listExperiments(projectId, listOptions);
-    
-    // Filter out archived experiments by default (excludeArchived defaults to true)
-    // Archived experiments have status === "archived"
     const excludeArchived = params.excludeArchived ?? true; // Default to true if not specified
-    const experiments = excludeArchived
-      ? allExperiments.filter((exp) => exp.status !== "archived")
-      : allExperiments;
+    const requestedPerPage = params.per_page || 50;
+    const requestedPage = params.page || 1;
     
-    console.log(
-      `DEBUG: Fetched ${allExperiments.length} total experiments, ${excludeArchived ? `filtered to ${experiments.length} non-archived` : "showing all"}`
-    );
-
-    return {
-      project_id: projectId,
-      total_count: experiments.length,
-      experiments: experiments.map((exp) => ({
-        id: String(exp.id), // Ensure ID is handled as string to prevent precision loss
-        name: exp.name,
-        status: exp.status,
-        type: exp.type,
-        created: formatDate(exp.created),
-        last_modified: formatDate(exp.last_modified),
-        description: exp.description,
-        traffic_allocation: exp.traffic_allocation,
-        holdback: exp.holdback,
-        variations_count: exp.variations?.length || 0,
-        campaign_id: exp.campaign_id,
-      })),
-    };
+    let allExperiments: OptimizelyExperiment[] = [];
+    let currentPage = requestedPage;
+    let hasMorePages = true;
+    const maxPagesToFetch = 10; // Safety limit to prevent infinite loops
+    
+    // If excluding archived and no specific page requested, fetch multiple pages to get enough non-archived experiments
+    if (excludeArchived && !params.page) {
+      console.log(
+        `DEBUG: Fetching multiple pages to collect non-archived experiments (target: ${requestedPerPage} experiments)`
+      );
+      
+      let nonArchivedCount = 0;
+      
+      while (nonArchivedCount < requestedPerPage && hasMorePages && currentPage <= maxPagesToFetch) {
+        console.log(`DEBUG: Fetching page ${currentPage}...`);
+        const pageExperiments = await client.listExperiments(projectId, {
+          page: currentPage,
+          per_page: 100, // Use max per_page to minimize API calls
+        });
+        
+        if (pageExperiments.length === 0) {
+          hasMorePages = false;
+        } else {
+          allExperiments = allExperiments.concat(pageExperiments);
+          // Count non-archived experiments by checking the new ones we just added
+          const newNonArchived = pageExperiments.filter((exp) => exp.status !== "archived").length;
+          nonArchivedCount += newNonArchived;
+          currentPage++;
+        }
+      }
+      
+      // Filter out archived experiments
+      const nonArchivedExperiments = allExperiments.filter((exp) => exp.status !== "archived");
+      
+      // Limit to requested number
+      const experiments = nonArchivedExperiments.slice(0, requestedPerPage);
+      
+      console.log(
+        `DEBUG: Fetched ${allExperiments.length} total experiments across ${currentPage - 1} pages, filtered to ${nonArchivedExperiments.length} non-archived, returning ${experiments.length}`
+      );
+      
+      return {
+        project_id: projectId,
+        total_count: experiments.length,
+        experiments: experiments.map((exp) => ({
+          id: String(exp.id),
+          name: exp.name,
+          status: exp.status,
+          type: exp.type,
+          created: formatDate(exp.created),
+          last_modified: formatDate(exp.last_modified),
+          description: exp.description,
+          traffic_allocation: exp.traffic_allocation,
+          holdback: exp.holdback,
+          variations_count: exp.variations?.length || 0,
+          campaign_id: exp.campaign_id,
+        })),
+      };
+    } else {
+      // For specific page requests or when including archived, use normal pagination
+      console.log(
+        `DEBUG: Making request to: /experiments?project_id=${projectId}&per_page=${requestedPerPage}&page=${requestedPage}`
+      );
+      
+      const listOptions: {
+        page?: number;
+        per_page?: number;
+      } = {
+        page: requestedPage,
+        per_page: requestedPerPage,
+      };
+      
+      const fetchedExperiments = await client.listExperiments(projectId, listOptions);
+      
+      // Filter out archived experiments if requested
+      const experiments = excludeArchived
+        ? fetchedExperiments.filter((exp) => exp.status !== "archived")
+        : fetchedExperiments;
+      
+      console.log(
+        `DEBUG: Fetched ${fetchedExperiments.length} total experiments, ${excludeArchived ? `filtered to ${experiments.length} non-archived` : "showing all"}`
+      );
+      
+      return {
+        project_id: projectId,
+        total_count: experiments.length,
+        experiments: experiments.map((exp) => ({
+          id: String(exp.id),
+          name: exp.name,
+          status: exp.status,
+          type: exp.type,
+          created: formatDate(exp.created),
+          last_modified: formatDate(exp.last_modified),
+          description: exp.description,
+          traffic_allocation: exp.traffic_allocation,
+          holdback: exp.holdback,
+          variations_count: exp.variations?.length || 0,
+          campaign_id: exp.campaign_id,
+        })),
+      };
+    }
   } catch (error) {
     if (error instanceof OptimizelyClientError) {
       // Provide more specific error messages based on status code
