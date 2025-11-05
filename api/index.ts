@@ -527,6 +527,12 @@ tool({
       required: true,
     },
     {
+      name: "archived",
+      type: ParameterType.Boolean,
+      description: "Filter by archived status (optional). Set to false to exclude archived experiments.",
+      required: false,
+    },
+    {
       name: "page",
       type: ParameterType.Number,
       description: "Page number for pagination (optional)",

@@ -187,6 +187,12 @@ export class OptimizelyClient {
       console.log(`DEBUG: Not adding include_classic parameter (undefined)`);
     }
 
+    // Add archived parameter if explicitly set
+    if (options.archived !== undefined) {
+      params.append("archived", options.archived.toString());
+      console.log(`DEBUG: Adding archived=${options.archived}`);
+    }
+
     const url = `/experiments?${params.toString()}`;
     console.log(`DEBUG: Making request to: ${url}`);
     console.log(`DEBUG: Project ID: ${projectId}, Type: ${typeof projectId}`);

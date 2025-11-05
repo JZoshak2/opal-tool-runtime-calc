@@ -120,8 +120,8 @@ export async function listExperiments(
     const experiments = await client.listExperiments(projectId, {
       page: params.page,
       per_page: params.per_page || 50,
-      // Removed include_classic parameter entirely
-      archived: params.archived || false,
+      // Only include archived if explicitly set
+      ...(params.archived !== undefined && { archived: params.archived }),
     });
 
     return {
