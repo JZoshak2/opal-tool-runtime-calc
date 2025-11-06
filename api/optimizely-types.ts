@@ -149,7 +149,7 @@ export interface ListExperimentsParams {
 }
 
 export interface SearchExperimentsParams {
-  projectId: string;
+  projectId?: string;
   query?: string;
   archived?: boolean;
   status?: "not_started" | "running" | "paused" | "archived" | "concluded";

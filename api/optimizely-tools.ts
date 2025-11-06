@@ -223,24 +223,26 @@ export async function listExperiments(
 
 /**
  * Search Experiments Tool
- * Searches for experiments by name in a project using the Search API.
+ * Searches for experiments by name using the Search API.
  * If no query is provided, uses blank query parameter to return all experiments.
+ * If no projectId is provided, searches across all projects.
  * Automatically paginates through all pages to return complete results.
  */
 export async function searchExperiments(
   params: SearchExperimentsParams
 ): Promise<FormattedExperimentList> {
-  const projectId = getProjectId(params);
+  const projectId = params.projectId; // Optional - can be undefined for cross-project search
   const { query, status, archived } = params;
   const client = getOptimizelyClient();
 
   // Normalize query: use empty string if not provided or blank
   const searchQuery = query?.trim() || "";
   const searchQueryDisplay = searchQuery || "(blank - all experiments)";
+  const projectDisplay = projectId || "all projects";
 
   try {
     console.log(
-      `DEBUG: Searching experiments for project ${projectId} with query "${searchQueryDisplay}"`
+      `DEBUG: Searching experiments for ${projectDisplay} with query "${searchQueryDisplay}"`
     );
 
     // Paginate through all search results
@@ -303,7 +305,7 @@ export async function searchExperiments(
     }
 
     return {
-      project_id: projectId,
+      project_id: projectId || "all", // Use "all" as placeholder when searching across projects
       total_count: filteredResults.length,
       experiments: filteredResults.map((exp) => ({
         id: String(exp.id),
@@ -323,13 +325,13 @@ export async function searchExperiments(
     if (error instanceof OptimizelyClientError) {
       if (error.status === 400) {
         throw new Error(
-          `Bad request when searching experiments for project ${projectId}. This could indicate: 1) The project ID format is incorrect, 2) The project ID doesn't exist, 3) Your API token doesn't have access to this project, or 4) The search query is malformed. Please verify the project ID and query are correct. API Error: ${
+          `Bad request when searching experiments${projectId ? ` for project ${projectId}` : " across all projects"}. This could indicate: 1) The project ID format is incorrect (if provided), 2) The project ID doesn't exist, 3) Your API token doesn't have access, or 4) The search query is malformed. Please verify the project ID (if provided) and query are correct. API Error: ${
             error.message
           } ${error.details ? `(${JSON.stringify(error.details)})` : ""}`
         );
       } else if (error.status === 404) {
         throw new Error(
-          `No experiments found matching query "${searchQueryDisplay}" in project ${projectId}. The search endpoint returned 404.`
+          `No experiments found matching query "${searchQueryDisplay}"${projectId ? ` in project ${projectId}` : " across all projects"}. The search endpoint returned 404.`
         );
       } else if (error.status === 401) {
         throw new Error(
@@ -337,7 +339,7 @@ export async function searchExperiments(
         );
       } else if (error.status === 403) {
         throw new Error(
-          `Access forbidden to project ${projectId}. Your API token may not have the required permissions.`
+          `Access forbidden${projectId ? ` to project ${projectId}` : ""}. Your API token may not have the required permissions.`
         );
       }
       throw new Error(`Failed to search experiments: ${error.message}`);

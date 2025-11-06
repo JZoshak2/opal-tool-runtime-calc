@@ -347,7 +347,7 @@ export class OptimizelyClient {
 
   // Search methods
   async search(
-    projectId: string,
+    projectId: string | undefined,
     query: string | undefined,
     options: {
       type?: string;
@@ -357,7 +357,10 @@ export class OptimizelyClient {
     } = {}
   ): Promise<any[]> {
     const params = new URLSearchParams();
-    params.append("project_id", projectId);
+    // Only append project_id if provided (allows searching across all projects)
+    if (projectId) {
+      params.append("project_id", projectId);
+    }
     // Always append query parameter, even if empty (blank query returns all results)
     params.append("query", query || "");
     if (options.type) params.append("type", options.type);
