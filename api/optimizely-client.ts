@@ -161,6 +161,20 @@ export class OptimizelyClient {
     return this.makeRequest<OptimizelyProject>("GET", `/projects/${projectId}`);
   }
 
+  async listProjects(options: {
+    page?: number;
+    per_page?: number;
+  } = {}): Promise<OptimizelyProject[]> {
+    const params = new URLSearchParams();
+    if (options.page) params.append("page", options.page.toString());
+    if (options.per_page)
+      params.append("per_page", options.per_page.toString());
+
+    const url = `/projects${params.toString() ? `?${params.toString()}` : ""}`;
+    console.log(`DEBUG: Making request to: ${url}`);
+    return this.makeRequest<OptimizelyProject[]>("GET", url);
+  }
+
   // Experiment methods
   async listExperiments(
     projectId: string,

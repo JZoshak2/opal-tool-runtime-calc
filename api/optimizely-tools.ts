@@ -3,6 +3,7 @@ import {
   OptimizelyClientError,
 } from "./optimizely-client";
 import type {
+  ListProjectsParams,
   ListExperimentsParams,
   SearchExperimentsParams,
   ListAudiencesParams,
@@ -14,6 +15,7 @@ import type {
   GetEventParams,
   GetExperimentResultsParams,
   CreateExperimentParams,
+  FormattedProjectList,
   FormattedExperimentList,
   FormattedExperiment,
   FormattedAudienceList,
@@ -23,6 +25,7 @@ import type {
   FormattedEventList,
   FormattedEvent,
   FormattedExperimentResults,
+  OptimizelyProject,
   OptimizelyExperiment,
   OptimizelyAudience,
   OptimizelyPage,
@@ -85,6 +88,123 @@ async function resolveEntityByName<
   }
 
   return matches[0].id;
+}
+
+/**
+ * List Projects Tool
+ * Returns a formatted list of all projects in the account
+ * By default, returns only active projects unless archived=true is specified
+ */
+export async function listProjects(
+  params: ListProjectsParams
+): Promise<FormattedProjectList> {
+  const client = getOptimizelyClient();
+
+  try {
+    console.log(`DEBUG: Attempting to list projects`);
+
+    // Paginate through all projects
+    const perPage = params.per_page || 50;
+    const allProjects: OptimizelyProject[] = [];
+    const startPage = params.page || 1;
+    let currentPage = startPage;
+    const fetchSinglePage = params.page !== undefined;
+    let hasMorePages = true;
+
+    console.log(
+      `DEBUG: Starting pagination - fetching ${fetchSinglePage ? 'single' : 'all'} projects`
+    );
+
+    while (hasMorePages) {
+      console.log(`DEBUG: Fetching page ${currentPage} with ${perPage} per page`);
+
+      const pageProjects = await client.listProjects({
+        page: currentPage,
+        per_page: perPage,
+      });
+
+      console.log(
+        `DEBUG: Page ${currentPage} returned ${pageProjects.length} projects`
+      );
+
+      // Add projects from this page to our collection
+      allProjects.push(...pageProjects);
+
+      // If fetching a single page, stop after first iteration
+      if (fetchSinglePage) {
+        hasMorePages = false;
+        console.log(`DEBUG: Single page requested (page ${startPage}), stopping pagination`);
+      } else {
+        // Check if we've reached the last page
+        if (pageProjects.length < perPage) {
+          hasMorePages = false;
+          console.log(
+            `DEBUG: Last page reached (got ${pageProjects.length} < ${perPage})`
+          );
+        } else {
+          currentPage++;
+        }
+      }
+    }
+
+    console.log(
+      `DEBUG: Collected ${allProjects.length} total projects across ${currentPage} page(s)`
+    );
+
+    // Filter out archived projects client-side if archived=false or not specified
+    const shouldIncludeArchived = params.archived === true;
+    const filteredProjects = shouldIncludeArchived
+      ? allProjects
+      : allProjects.filter((proj) => proj.status === "active");
+
+    console.log(
+      `DEBUG: After filtering (archived=${params.archived}): ${filteredProjects.length} projects`
+    );
+
+    return {
+      total_count: filteredProjects.length,
+      projects: filteredProjects.map((proj) => ({
+        id: String(proj.id),
+        name: proj.name,
+        platform: proj.platform,
+        status: proj.status,
+        created: formatDate(proj.created),
+        last_modified: formatDate(proj.last_modified),
+        description: proj.description,
+        account_id: proj.account_id,
+        is_classic: proj.is_classic,
+      })),
+    };
+  } catch (error) {
+    if (error instanceof OptimizelyClientError) {
+      // Provide more specific error messages based on status code
+      if (error.status === 400) {
+        throw new Error(
+          `Bad request when listing projects. This could indicate: 1) Invalid pagination parameters, 2) Your API token doesn't have access, or 3) Required parameters are missing or malformed. Please verify your API token has the necessary permissions. API Error: ${
+            error.message
+          } ${error.details ? `(${JSON.stringify(error.details)})` : ""}`
+        );
+      } else if (error.status === 404) {
+        throw new Error(
+          `No projects found. The projects endpoint returned 404. This could indicate your API token doesn't have access to list projects.`
+        );
+      } else if (error.status === 401) {
+        throw new Error(
+          `Authentication failed. Please check your OPTIMIZELY_API_TOKEN.`
+        );
+      } else if (error.status === 403) {
+        throw new Error(
+          `Access forbidden. Your API token may not have the required permissions to list projects.`
+        );
+      }
+      throw new Error(`Failed to list projects: ${error.message}`);
+    }
+    throw new Error(
+      `Unexpected error listing projects: ${
+        error instanceof Error ? error.message : "Unknown error"
+      }`
+    );
+  }
 }
 
 /**

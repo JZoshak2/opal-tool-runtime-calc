@@ -140,6 +140,12 @@ export interface OptimizelyVariationResults {
 }
 
 // Request/Response types for our tools
+export interface ListProjectsParams {
+  archived?: boolean;
+  page?: number;
+  per_page?: number;
+}
+
 export interface ListExperimentsParams {
   projectId: string;
   archived?: boolean;
@@ -237,6 +243,21 @@ export interface CreateExperimentParams {
 }
 
 // Formatted response types for readable output
+export interface FormattedProjectList {
+  total_count: number;
+  projects: {
+    id: string;
+    name: string;
+    platform: string;
+    status: "active" | "archived";
+    created: string;
+    last_modified: string;
+    description?: string;
+    account_id: number;
+    is_classic: boolean;
+  }[];
+}
+
 export interface FormattedExperimentList {
   project_id: string;
   total_count: number;

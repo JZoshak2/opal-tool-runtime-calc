@@ -26,6 +26,7 @@ import type {
 
 // Optimizely Web Experimentation Tools
 import {
+  listProjects,
   listExperiments,
   searchExperiments,
   getExperiment,
@@ -41,6 +42,7 @@ import {
   getProjectOverview,
 } from "./optimizely-tools";
 import type {
+  ListProjectsParams,
   ListExperimentsParams,
   SearchExperimentsParams,
   GetExperimentParams,
@@ -518,6 +520,32 @@ tool({
 })(createConfluencePage);
 
 // Optimizely Web Experimentation Tools
+tool({
+  name: "list_projects",
+  description:
+    "Lists all active projects in your Optimizely account with readable formatting. Automatically paginates through all pages to return complete results. By default, returns only active projects unless archived=true is specified.",
+  parameters: [
+    {
+      name: "page",
+      type: ParameterType.Number,
+      description: "Optional: Fetch only a specific page number. If omitted, fetches all pages automatically.",
+      required: false,
+    },
+    {
+      name: "per_page",
+      type: ParameterType.Number,
+      description: "Number of results per page (default: 50, max: 100). Used for pagination requests.",
+      required: false,
+    },
+    {
+      name: "archived",
+      type: ParameterType.Boolean,
+      description: "If true, includes archived projects. If false or omitted, returns only active projects.",
+      required: false,
+    },
+  ],
+})(listProjects);
+
 tool({
   name: "list_experiments",
   description:
