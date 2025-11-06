@@ -155,7 +155,7 @@ export interface ListExperimentsParams {
 }
 
 export interface SearchExperimentsParams {
-  projectId?: string;
+  projectId?: string; // Optional: Single project ID or comma-separated list of project IDs (e.g., "123,456,789")
   query?: string;
   archived?: boolean;
   status?: "not_started" | "running" | "paused" | "archived" | "concluded";

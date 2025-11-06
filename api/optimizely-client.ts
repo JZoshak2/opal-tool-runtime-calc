@@ -372,8 +372,21 @@ export class OptimizelyClient {
   ): Promise<any[]> {
     const params = new URLSearchParams();
     // Only append project_id if provided (allows searching across all projects)
+    // projectId can be a single ID or comma-separated list of IDs (e.g., "123,456,789")
+    // The API expects project_id as an array query parameter, so we append each ID separately
     if (projectId) {
-      params.append("project_id", projectId);
+      const projectIds = projectId.includes(",")
+        ? projectId.split(",").map((id) => id.trim()).filter((id) => id)
+        : [projectId.trim()];
+      
+      // Append each project ID as a separate query parameter (creates array format)
+      projectIds.forEach((id) => {
+        params.append("project_id", id);
+      });
+      
+      console.log(
+        `DEBUG: Adding ${projectIds.length} project_id(s) as array parameter: ${projectIds.join(", ")}`
+      );
     }
     // Always append query parameter, even if empty (blank query returns all results)
     params.append("query", query || "");

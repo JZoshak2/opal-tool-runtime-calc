@@ -346,19 +346,30 @@ export async function listExperiments(
  * Searches for experiments by name using the Search API.
  * If no query is provided, uses blank query parameter to return all experiments.
  * If no projectId is provided, searches across all projects.
+ * projectId can be a single project ID or comma-separated list of project IDs.
  * Automatically paginates through all pages to return complete results.
  */
 export async function searchExperiments(
   params: SearchExperimentsParams
 ): Promise<FormattedExperimentList> {
-  const projectId = params.projectId; // Optional - can be undefined for cross-project search
+  const projectId = params.projectId; // Optional - can be undefined, single ID, or comma-separated IDs
   const { query, status, archived } = params;
   const client = getOptimizelyClient();
 
   // Normalize query: use empty string if not provided or blank
   const searchQuery = query?.trim() || "";
   const searchQueryDisplay = searchQuery || "(blank - all experiments)";
-  const projectDisplay = projectId || "all projects";
+  
+  // Format project display for logging
+  let projectDisplay: string;
+  if (!projectId) {
+    projectDisplay = "all projects";
+  } else if (projectId.includes(",")) {
+    const projectIds = projectId.split(",").map(id => id.trim()).filter(id => id);
+    projectDisplay = `${projectIds.length} project(s): ${projectIds.join(", ")}`;
+  } else {
+    projectDisplay = `project ${projectId}`;
+  }
 
   try {
     console.log(
@@ -424,8 +435,11 @@ export async function searchExperiments(
       );
     }
 
+    // Format project_id for response
+    const responseProjectId = projectId || "all"; // Use "all" as placeholder when searching across projects
+    
     return {
-      project_id: projectId || "all", // Use "all" as placeholder when searching across projects
+      project_id: responseProjectId,
       total_count: filteredResults.length,
       experiments: filteredResults.map((exp) => ({
         id: String(exp.id),
@@ -444,22 +458,31 @@ export async function searchExperiments(
   } catch (error) {
     if (error instanceof OptimizelyClientError) {
       if (error.status === 400) {
+        const projectContext = projectId 
+          ? (projectId.includes(",") ? ` for projects ${projectId}` : ` for project ${projectId}`)
+          : " across all projects";
         throw new Error(
-          `Bad request when searching experiments${projectId ? ` for project ${projectId}` : " across all projects"}. This could indicate: 1) The project ID format is incorrect (if provided), 2) The project ID doesn't exist, 3) Your API token doesn't have access, or 4) The search query is malformed. Please verify the project ID (if provided) and query are correct. API Error: ${
+          `Bad request when searching experiments${projectContext}. This could indicate: 1) The project ID format is incorrect (if provided - use comma-separated for multiple), 2) One or more project IDs don't exist, 3) Your API token doesn't have access, or 4) The search query is malformed. Please verify the project ID(s) (if provided) and query are correct. API Error: ${
             error.message
           } ${error.details ? `(${JSON.stringify(error.details)})` : ""}`
         );
       } else if (error.status === 404) {
+        const projectContext = projectId 
+          ? (projectId.includes(",") ? ` in projects ${projectId}` : ` in project ${projectId}`)
+          : " across all projects";
         throw new Error(
-          `No experiments found matching query "${searchQueryDisplay}"${projectId ? ` in project ${projectId}` : " across all projects"}. The search endpoint returned 404.`
+          `No experiments found matching query "${searchQueryDisplay}"${projectContext}. The search endpoint returned 404.`
         );
       } else if (error.status === 401) {
         throw new Error(
           `Authentication failed. Please check your OPTIMIZELY_API_TOKEN.`
         );
       } else if (error.status === 403) {
+        const projectContext = projectId 
+          ? (projectId.includes(",") ? ` to projects ${projectId}` : ` to project ${projectId}`)
+          : "";
         throw new Error(
-          `Access forbidden${projectId ? ` to project ${projectId}` : ""}. Your API token may not have the required permissions.`
+          `Access forbidden${projectContext}. Your API token may not have the required permissions.`
         );
       }
       throw new Error(`Failed to search experiments: ${error.message}`);

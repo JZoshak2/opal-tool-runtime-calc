@@ -584,7 +584,7 @@ tool({
 
 📋 SEARCH CAPABILITIES:
 • Text search across experiment names (optional - uses blank query to return all)
-• Search within a specific project OR across all projects (omit projectId)
+• Search within a specific project, multiple projects (comma-separated), OR across all projects (omit projectId)
 • Automatically paginates through all pages to return complete results
 • Filter by status (running, paused, not_started, concluded, archived)
 • Filter by archived status (passed to API for server-side filtering)
@@ -593,12 +593,14 @@ tool({
 🎯 USE CASES:
 • Find experiments matching specific keywords across all projects
 • Locate experiments by partial name match in a specific project
+• Search across multiple specific projects (comma-separated project IDs)
 • List all experiments with status/archived filters (omit query parameter)
 • Search across all accessible projects (omit projectId)
 • Discover experiments without knowing exact names or project
 
 💡 TIPS:
 • Omit projectId to search across all projects you have access to
+• Use comma-separated project IDs to search multiple projects: "123,456,789"
 • Omit query parameter to list all experiments (uses blank query)
 • Search is case-insensitive when query is provided
 • Use broad terms to find more results
@@ -609,7 +611,7 @@ tool({
     {
       name: "projectId",
       type: ParameterType.String,
-      description: "Optional: The Optimizely project ID to search within. If omitted, searches across all projects you have access to.",
+      description: "Optional: Single Optimizely project ID (e.g., \"123\") or comma-separated list of project IDs (e.g., \"123,456,789\") to search within. If omitted, searches across all projects you have access to.",
       required: false,
     },
     {
