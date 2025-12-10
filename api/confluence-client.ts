@@ -363,7 +363,7 @@ class ConfluenceClient {
           timeout: 30000,
         });
 
-        const response = await v1Client.get('/space', {
+        const response = await v1Client.get<{ id: string }>('/space', {
           params: {
             spaceKey: spaceKey.toUpperCase(),
           }
