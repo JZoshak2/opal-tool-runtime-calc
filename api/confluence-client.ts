@@ -76,6 +76,13 @@ class ConfluenceClient {
   private client: any;
   public readonly baseUrl: string;
 
+  /**
+   * Get the base URL for constructing full URLs
+   */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   constructor() {
     const confluencePat = process.env.CONFLUENCE_PAT;
     const confluenceEmail = process.env.CONFLUENCE_EMAIL;
@@ -348,9 +355,11 @@ class ConfluenceClient {
     } catch (error) {
       // If v2 spaces endpoint doesn't work, try v1 API as fallback
       try {
+        // Get headers from the existing client
+        const existingHeaders = (this.client as any).defaults?.headers || {};
         const v1Client = axios.create({
           baseURL: `${this.baseUrl}/wiki/rest/api`,
-          headers: this.client.defaults.headers,
+          headers: { ...existingHeaders },
           timeout: 30000,
         });
 

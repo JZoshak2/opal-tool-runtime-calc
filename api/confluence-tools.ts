@@ -318,7 +318,7 @@ export async function readConfluencePage(
       lastModified: page.version.createdAt,
       url: page._links.webui.startsWith("http")
         ? page._links.webui
-        : `${confluenceClient.baseUrl}${page._links.webui}`,
+        : `${confluenceClient.getBaseUrl()}${page._links.webui}`,
     };
   } catch (error) {
     if (error instanceof ConfluenceClientError) {
@@ -482,7 +482,7 @@ export async function createConfluencePage(
 
     const result = await confluenceClient.createPage(pageData);
 
-    const baseUrl = confluenceClient.baseUrl || "";
+    const baseUrl = confluenceClient.getBaseUrl();
     const webuiUrl = result._links.webui.startsWith("http")
       ? result._links.webui
       : `${baseUrl}${result._links.webui}`;
