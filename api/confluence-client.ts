@@ -20,27 +20,25 @@ export class ConfluenceClientError extends Error {
 
 export type ConfluencePage = {
   id: string;
-  type: string;
+  type?: string;
   status: string;
   title: string;
-  space: {
-    id: string;
-    key: string;
-    name: string;
-  };
-  version: {
-    number: number;
-    by: {
-      displayName: string;
-      emailAddress: string;
-    };
-    when: string;
-  };
+  spaceId: string;
+  parentId?: string;
   body: {
-    storage: {
+    representation: string;
+    value: string;
+    storage?: {
       value: string;
       representation: string;
     };
+  };
+  version: {
+    number: number;
+    message?: string;
+    minorEdit?: boolean;
+    authorId?: string;
+    createdAt?: string;
   };
   _links: {
     webui: string;
@@ -49,59 +47,69 @@ export type ConfluencePage = {
 };
 
 export type CreatePageRequest = {
-  type: string;
   title: string;
-  space: {
-    key: string;
-  };
+  spaceId: string;
+  parentId?: string;
+  status?: string;
   body: {
-    storage: {
-      value: string;
-      representation: string;
-    };
+    representation: string;
+    value: string;
   };
-  ancestors?: Array<{
-    id: string;
-  }>;
 };
 
 export type UpdatePageRequest = {
+  id: string;
+  title: string;
+  spaceId: string;
+  parentId?: string;
+  status?: string;
   version: {
     number: number;
   };
-  title: string;
-  type: string;
   body: {
-    storage: {
-      value: string;
-      representation: string;
-    };
+    representation: string;
+    value: string;
   };
 };
 
 class ConfluenceClient {
   private client: any;
-  private baseUrl: string;
+  public readonly baseUrl: string;
 
   constructor() {
     const confluencePat = process.env.CONFLUENCE_PAT;
-    if (!confluencePat) {
+    const confluenceEmail = process.env.CONFLUENCE_EMAIL;
+    const confluenceApiToken = process.env.CONFLUENCE_API_TOKEN;
+    const confluenceBaseUrl = process.env.CONFLUENCE_BASE_URL;
+
+    // Support both PAT (Bearer) and Basic Auth (email + API token)
+    let authHeader: string;
+    if (confluencePat) {
+      authHeader = `Bearer ${confluencePat}`;
+    } else if (confluenceEmail && confluenceApiToken) {
+      // Basic Auth: base64 encode email:apiToken
+      const credentials = Buffer.from(`${confluenceEmail}:${confluenceApiToken}`).toString('base64');
+      authHeader = `Basic ${credentials}`;
+    } else {
       throw new ConfluenceClientError(
-        'CONFLUENCE_PAT environment variable is required. Please set your Confluence Personal Access Token.',
+        'Confluence authentication is required. Please set either CONFLUENCE_PAT (Personal Access Token) or both CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN (API token).',
         undefined,
         'MISSING_CREDENTIALS',
-        'Set the CONFLUENCE_PAT environment variable with your Confluence Personal Access Token'
+        'Set CONFLUENCE_PAT for Bearer token auth, or CONFLUENCE_EMAIL + CONFLUENCE_API_TOKEN for Basic auth'
       );
     }
 
-    this.baseUrl = 'https://confluence.sso.episerver.net';
+    // Base URL defaults to a cloud instance, but can be overridden
+    this.baseUrl = confluenceBaseUrl || 'https://your-domain.atlassian.net';
+    
     this.client = axios.create({
-      baseURL: `${this.baseUrl}/rest/api`,
+      baseURL: `${this.baseUrl}/wiki/api/v2`,
       headers: {
-        'Authorization': `Bearer ${confluencePat}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      timeout: 10000,
+      timeout: 30000,
     });
 
     // Add response interceptor for error handling
@@ -116,20 +124,20 @@ class ConfluenceClient {
   private handleApiError(error: any): ConfluenceClientError {
     if (error.response) {
       const { status, data } = error.response;
-      const message = data?.message || `HTTP ${status} error`;
+      const message = data?.message || data?.title || `HTTP ${status} error`;
       
       let enhancedMessage = 'Confluence API Error';
       let code = `HTTP_${status}`;
       let details = data;
 
       if (status === 401) {
-        enhancedMessage = 'Authentication failed. Please check your CONFLUENCE_PAT token has valid permissions.';
+        enhancedMessage = 'Authentication failed. Please check your Confluence credentials (CONFLUENCE_PAT or CONFLUENCE_EMAIL/CONFLUENCE_API_TOKEN) have valid permissions.';
         code = 'AUTHENTICATION_ERROR';
       } else if (status === 403) {
         enhancedMessage = 'Access forbidden. Your Confluence account may not have the required permissions for this space or page.';
         code = 'AUTHORIZATION_ERROR';
       } else if (status === 404) {
-        enhancedMessage = 'Resource not found. The page ID, space key, or page title may not exist.';
+        enhancedMessage = 'Resource not found. The page ID, space ID, or page title may not exist.';
         code = 'NOT_FOUND_ERROR';
       } else if (status === 400) {
         enhancedMessage = `Invalid request data. ${message || 'Please check your input parameters.'}`;
@@ -144,7 +152,7 @@ class ConfluenceClient {
       return new ConfluenceClientError(enhancedMessage, status, code, details);
     } else if (error.request) {
       return new ConfluenceClientError(
-        'Network error: Unable to reach Confluence API. Please check your connection and that confluence.sso.episerver.net is accessible.',
+        'Network error: Unable to reach Confluence API. Please check your connection and that the Confluence instance is accessible.',
         undefined,
         'NETWORK_ERROR',
         error.message
@@ -165,25 +173,21 @@ class ConfluenceClient {
         'Page ID is required and must be a valid string',
         undefined,
         'VALIDATION_ERROR',
-        'Provide a valid Confluence page ID (numeric string)'
+        'Provide a valid Confluence page ID'
       );
     }
 
-    const response = await this.client.get(`/content/${pageId}`, {
-      params: {
-        expand: 'body.storage,version,space'
-      }
-    });
+    const response = await this.client.get(`/pages/${pageId}`);
     return response.data;
   }
 
-  async getPageByTitle(spaceKey: string, title: string): Promise<ConfluencePage> {
-    if (!spaceKey || typeof spaceKey !== 'string') {
+  async getPageByTitle(spaceId: string, title: string): Promise<ConfluencePage> {
+    if (!spaceId || typeof spaceId !== 'string') {
       throw new ConfluenceClientError(
-        'Space key is required and must be a valid string',
+        'Space ID is required and must be a valid string',
         undefined,
         'VALIDATION_ERROR',
-        'Provide a valid Confluence space key (e.g., "MYSPACE")'
+        'Provide a valid Confluence space ID'
       );
     }
 
@@ -196,21 +200,21 @@ class ConfluenceClient {
       );
     }
 
-    const response = await this.client.get('/content', {
+    // Search for pages in the space with the given title
+    const response = await this.client.get('/pages', {
       params: {
-        spaceKey: spaceKey.toUpperCase(),
-        title,
-        expand: 'body.storage,version,space',
-        limit: 1
+        spaceId: spaceId,
+        title: title,
+        limit: 1,
       }
     });
     
     if (!response.data.results || response.data.results.length === 0) {
       throw new ConfluenceClientError(
-        `Page with title "${title}" not found in space "${spaceKey}". Please check the title and space key are correct.`,
+        `Page with title "${title}" not found in space "${spaceId}". Please check the title and space ID are correct.`,
         404,
         'NOT_FOUND_ERROR',
-        `Search performed in space: ${spaceKey}, title: "${title}"`
+        `Search performed in space: ${spaceId}, title: "${title}"`
       );
     }
     
@@ -223,16 +227,16 @@ class ConfluenceClient {
         'Page ID is required and must be a valid string',
         undefined,
         'VALIDATION_ERROR',
-        'Provide a valid Confluence page ID (numeric string)'
+        'Provide a valid Confluence page ID'
       );
     }
 
     if (!updateData || typeof updateData !== 'object') {
       throw new ConfluenceClientError(
-        'Update data is required and must be an object with version, title, type, and body',
+        'Update data is required and must be an object with id, title, spaceId, version, and body',
         undefined,
         'VALIDATION_ERROR',
-        'Provide update data with: { version: { number: X }, title: "...", type: "page", body: { storage: { value: "...", representation: "storage" } } }'
+        'Provide update data with: { id: "...", title: "...", spaceId: "...", version: { number: X }, body: { representation: "storage", value: "..." } }'
       );
     }
 
@@ -245,26 +249,32 @@ class ConfluenceClient {
       );
     }
 
-    const response = await this.client.put(`/content/${pageId}`, updateData);
+    // Ensure the ID in the request matches the pageId parameter
+    const requestData = {
+      ...updateData,
+      id: pageId,
+    };
+
+    const response = await this.client.put(`/pages/${pageId}`, requestData);
     return response.data;
   }
 
   async createPage(pageData: CreatePageRequest): Promise<ConfluencePage> {
     if (!pageData || typeof pageData !== 'object') {
       throw new ConfluenceClientError(
-        'Page data is required and must contain type, title, space, and body',
+        'Page data is required and must contain title, spaceId, and body',
         undefined,
         'VALIDATION_ERROR',
-        'Provide page data with: { type: "page", title: "...", space: { key: "..." }, body: { storage: { value: "...", representation: "storage" } } }'
+        'Provide page data with: { title: "...", spaceId: "...", body: { representation: "storage", value: "..." } }'
       );
     }
 
-    if (!pageData.space?.key) {
+    if (!pageData.spaceId) {
       throw new ConfluenceClientError(
-        'Space key is required in the format: { space: { key: "SPACE_KEY" } }',
+        'Space ID is required in the format: { spaceId: "SPACE_ID" }',
         undefined,
         'VALIDATION_ERROR',
-        'Specify the space where the page should be created, e.g., { space: { key: "MYSPACE" } }'
+        'Specify the space ID where the page should be created'
       );
     }
 
@@ -277,17 +287,97 @@ class ConfluenceClient {
       );
     }
 
-    if (!pageData.body?.storage?.value) {
+    if (!pageData.body?.value) {
       throw new ConfluenceClientError(
         'Page content is required in storage format',
         undefined,
         'VALIDATION_ERROR',
-        'Provide page content in the body: { storage: { value: "content", representation: "storage" } }'
+        'Provide page content in the body: { representation: "storage", value: "content" }'
       );
     }
 
-    const response = await this.client.post('/content', pageData);
+    // Set default status if not provided
+    const requestData = {
+      ...pageData,
+      status: pageData.status || 'current',
+      body: {
+        representation: pageData.body.representation || 'storage',
+        value: pageData.body.value,
+      },
+    };
+
+    const response = await this.client.post('/pages', requestData);
     return response.data;
+  }
+
+  /**
+   * Get space ID by space key (helper method)
+   * Note: Confluence Cloud API v2 may not have a direct spaces endpoint
+   * This method attempts to find a space by searching for pages in that space
+   * For better performance, use spaceId directly when possible
+   */
+  async getSpaceIdByKey(spaceKey: string): Promise<string> {
+    if (!spaceKey || typeof spaceKey !== 'string') {
+      throw new ConfluenceClientError(
+        'Space key is required and must be a valid string',
+        undefined,
+        'VALIDATION_ERROR',
+        'Provide a valid Confluence space key'
+      );
+    }
+
+    // Try to use the spaces API endpoint if available
+    // Note: Confluence Cloud API v2 may use /wiki/api/v2/spaces or may require v1 API
+    try {
+      // First try v2 spaces endpoint
+      const response = await this.client.get('/spaces', {
+        params: {
+          keys: spaceKey,
+          limit: 1,
+        }
+      });
+
+      // Cloud API v2 returns results array
+      const results = response.data.results || response.data;
+      if (results && (Array.isArray(results) ? results.length > 0 : true)) {
+        const space = Array.isArray(results) ? results[0] : results;
+        if (space && space.id) {
+          return space.id;
+        }
+      }
+    } catch (error) {
+      // If v2 spaces endpoint doesn't work, try v1 API as fallback
+      try {
+        const v1Client = axios.create({
+          baseURL: `${this.baseUrl}/wiki/rest/api`,
+          headers: this.client.defaults.headers,
+          timeout: 30000,
+        });
+
+        const response = await v1Client.get('/space', {
+          params: {
+            spaceKey: spaceKey.toUpperCase(),
+          }
+        });
+
+        if (response.data && response.data.id) {
+          return response.data.id;
+        }
+      } catch (v1Error) {
+        // If both fail, throw the original error
+        if (error instanceof ConfluenceClientError) {
+          throw error;
+        }
+      }
+    }
+
+    // If we get here, space lookup failed
+    throw new ConfluenceClientError(
+      `Failed to find space with key "${spaceKey}". You may need to provide the space ID directly instead of the space key. To find the space ID, you can: 1) Check the space URL in Confluence (the space ID is in the URL), 2) Use the Confluence UI to inspect the space, or 3) Use a page in that space to get its spaceId.`,
+      undefined,
+      'SPACE_LOOKUP_ERROR',
+      'Space key could not be resolved to space ID'
+    );
   }
 }
 

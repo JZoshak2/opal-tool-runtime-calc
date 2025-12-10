@@ -386,23 +386,24 @@ tool({
 
 tool({
   name: "read_confluence_page",
-  description: `📖 CONFLUENCE PAGE READER - Fetch page content and metadata
+  description: `📖 CONFLUENCE PAGE READER - Fetch page content and metadata (Confluence Cloud API v2)
 
 🔍 LOOKUP METHODS:
 • By ID: Direct page ID (most reliable)
-• By space + title: Space key + exact page title
+• By space ID + title: Space ID + exact page title
+• By space key + title: Space key + exact page title (space key will be resolved to space ID)
 
 📄 RETURNS:
-• Page content (storage format and view format)
-• Metadata (title, space, version, timestamps)
-• Author information and page hierarchy
+• Page content (storage format)
+• Metadata (title, space ID, version, timestamps)
+• Page URL
 
 ⚠️ ACCESS REQUIREMENTS:
 • Read permissions on space/page required
 • Exact title matching for space+title lookup
 • Archived pages may not be accessible
 
-💡 TIP: Use page ID when possible for consistent results`,
+💡 TIP: Use page ID when possible for consistent results. Space ID is preferred over space key for better performance.`,
   parameters: [
     {
       name: "pageId",
@@ -411,15 +412,21 @@ tool({
       required: false,
     },
     {
+      name: "spaceId",
+      type: ParameterType.String,
+      description: "The space ID (required if using title, preferred over spaceKey)",
+      required: false,
+    },
+    {
       name: "spaceKey",
       type: ParameterType.String,
-      description: "The space key (required if using title)",
+      description: "The space key (required if using title and spaceId not provided)",
       required: false,
     },
     {
       name: "title",
       type: ParameterType.String,
-      description: "The page title (required if using spaceKey)",
+      description: "The page title (required if using spaceId or spaceKey)",
       required: false,
     },
   ],
@@ -470,12 +477,12 @@ tool({
 
 tool({
   name: "create_confluence_page",
-  description: `➕ CONFLUENCE PAGE CREATOR - Create new pages with proper hierarchy
+  description: `➕ CONFLUENCE PAGE CREATOR - Create new pages with proper hierarchy (Confluence Cloud API v2)
 
 🎯 REQUIRED FIELDS:
-• spaceKey: Target space (e.g., "TEAM", "DOCS")
+• spaceId OR spaceKey: Target space (spaceId preferred for better performance)
 • title: Unique page title within space
-• content: Page content in storage format
+• content: Page content in Markdown format
 
 🏗️ STRUCTURE OPTIONS:
 • parentPageId: Create as child page (optional)
@@ -489,13 +496,20 @@ tool({
 💡 BEST PRACTICES:
 • Use descriptive, searchable titles
 • Consider page hierarchy for organization
-• Include proper content structure from start`,
+• Include proper content structure from start
+• Prefer spaceId over spaceKey for better performance`,
   parameters: [
+    {
+      name: "spaceId",
+      type: ParameterType.String,
+      description: "The space ID where the page should be created (preferred over spaceKey)",
+      required: false,
+    },
     {
       name: "spaceKey",
       type: ParameterType.String,
-      description: "The space key where the page should be created",
-      required: true,
+      description: "The space key where the page should be created (required if spaceId not provided)",
+      required: false,
     },
     {
       name: "title",
