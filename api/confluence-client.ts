@@ -131,11 +131,22 @@ class ConfluenceClient {
   private handleApiError(error: any): ConfluenceClientError {
     if (error.response) {
       const { status, data } = error.response;
-      const message = data?.message || data?.title || `HTTP ${status} error`;
+      const message = data?.message || data?.title || data?.detail || `HTTP ${status} error`;
+      
+      // Log full error response for debugging
+      if (status === 404) {
+        console.error('Confluence API 404 Error Details:', {
+          status,
+          data,
+          url: error.config?.url,
+          method: error.config?.method,
+          requestData: error.config?.data ? JSON.parse(error.config.data) : null
+        });
+      }
       
       let enhancedMessage = 'Confluence API Error';
       let code = `HTTP_${status}`;
-      let details = data;
+      let details = { ...data, fullResponse: data };
 
       if (status === 401) {
         enhancedMessage = 'Authentication failed. Please check your Confluence credentials (CONFLUENCE_PAT or CONFLUENCE_EMAIL/CONFLUENCE_API_TOKEN) have valid permissions.';
@@ -304,17 +315,65 @@ class ConfluenceClient {
     }
 
     // Set default status if not provided
+    // Ensure spaceId is a string (API may accept both, but we'll use string)
     const requestData = {
-      ...pageData,
+      title: pageData.title,
+      spaceId: String(pageData.spaceId), // Ensure it's a string
       status: pageData.status || 'current',
       body: {
         representation: pageData.body.representation || 'storage',
         value: pageData.body.value,
       },
+      ...(pageData.parentId && { parentId: String(pageData.parentId) }),
     };
 
-    const response = await this.client.post('/pages', requestData);
-    return response.data;
+    try {
+      // Log request for debugging (without sensitive content)
+      console.log('Creating Confluence page with:', {
+        title: requestData.title,
+        spaceId: requestData.spaceId,
+        status: requestData.status,
+        hasBody: !!requestData.body.value,
+        bodyLength: requestData.body.value?.length || 0,
+        parentId: requestData.parentId || 'none'
+      });
+
+      const response = await this.client.post('/pages', requestData);
+      return response.data;
+    } catch (error: any) {
+      // Enhanced error logging for debugging
+      if (error instanceof ConfluenceClientError) {
+        // Add request details to error for debugging
+        if (error.status === 404) {
+          // Check if it's a space not found error
+          const errorDetails = error.details || {};
+          const errorMessage = errorDetails.message || error.message || '';
+          
+          // Provide more specific error message
+          if (errorMessage.includes('space') || errorMessage.includes('Space')) {
+            throw new ConfluenceClientError(
+              `Space not found. The spaceId "${pageData.spaceId}" (type: ${typeof pageData.spaceId}) may not exist, may be incorrect, or you may not have access to it. Verify: 1) The space ID is correct (it should be a numeric string or number), 2) You have create permissions for this space, 3) The space exists in your Confluence instance. Original error: ${error.message}`,
+              error.status,
+              error.code,
+              { 
+                ...error.details, 
+                spaceId: pageData.spaceId,
+                spaceIdType: typeof pageData.spaceId,
+                requestUrl: `${this.baseUrl}/wiki/api/v2/pages`
+              }
+            );
+          }
+          throw new ConfluenceClientError(
+            `Resource not found (404). This could mean: 1) The spaceId "${pageData.spaceId}" doesn't exist, 2) You don't have access to create pages in this space, 3) The endpoint is incorrect. Verify the space ID format and permissions. Original error: ${error.message}`,
+            error.status,
+            error.code,
+            { ...error.details, spaceId: pageData.spaceId }
+          );
+        }
+        throw error;
+      }
+      throw error;
+    }
   }
 
   /**
