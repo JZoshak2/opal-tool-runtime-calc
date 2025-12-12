@@ -314,25 +314,23 @@ export async function readConfluencePage(
     console.log('Extracting content from page:', {
       hasBody: !!page.body,
       bodyType: typeof page.body,
-      bodyKeys: page.body ? Object.keys(page.body) : [],
+      bodyKeys: page.body && typeof page.body === 'object' ? Object.keys(page.body) : [],
       fullBody: JSON.stringify(page.body, null, 2).substring(0, 500)
     });
     
     if (page.body) {
-      // Try different possible structures
-      if (page.body.storage && typeof page.body.storage === 'object') {
-        if (page.body.storage.value) {
-          content = page.body.storage.value;
-        } else if (typeof page.body.storage === 'string') {
-          content = page.body.storage;
-        }
-      } else if (page.body.value) {
-        content = page.body.value;
-      } else if (page.body.atlas_doc_format && page.body.atlas_doc_format.value) {
-        content = page.body.atlas_doc_format.value;
-      } else if (typeof page.body === 'string') {
-        // Body might be a string directly
+      // Handle case where body is a string
+      if (typeof page.body === 'string') {
         content = page.body;
+      } else if (typeof page.body === 'object') {
+        // Try different possible structures
+        if (page.body.storage && typeof page.body.storage === 'object' && page.body.storage.value) {
+          content = page.body.storage.value;
+        } else if (page.body.value) {
+          content = page.body.value;
+        } else if (page.body.atlas_doc_format && page.body.atlas_doc_format.value) {
+          content = page.body.atlas_doc_format.value;
+        }
       }
     }
     

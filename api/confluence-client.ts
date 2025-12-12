@@ -26,13 +26,17 @@ export type ConfluencePage = {
   spaceId: string;
   parentId?: string;
   body: {
-    representation: string;
-    value: string;
+    representation?: string;
+    value?: string;
     storage?: {
       value: string;
       representation: string;
     };
-  };
+    atlas_doc_format?: {
+      value: string;
+      representation: string;
+    };
+  } | string; // Body can also be a string in some cases
   version: {
     number: number;
     message?: string;
