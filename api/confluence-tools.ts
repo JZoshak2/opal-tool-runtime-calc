@@ -455,12 +455,14 @@ export async function createConfluencePage(
       try {
         resolvedSpaceId = await confluenceClient.getSpaceIdByKey(spaceKey);
       } catch (error) {
-        // For personal spaces (starting with ~) or if lookup fails,
-        // try using the spaceKey directly as spaceId
-        // Personal spaces in Confluence Cloud may use the key format directly
+        // Personal spaces (starting with ~) cannot be used directly
+        // They need to be resolved to a numeric spaceId
         if (spaceKey.startsWith('~')) {
-          console.log(`Space key "${spaceKey}" looks like a personal space. Attempting to use it directly as spaceId.`);
-          resolvedSpaceId = spaceKey;
+          throw new Error(
+            `Personal space key "${spaceKey}" cannot be used directly. You need to provide the numeric space ID instead. To find the space ID: 1) Open the space in Confluence and check the URL, 2) Use the Spaces API to get the space details, or 3) Create a page in that space via the UI and inspect the page's spaceId property. The space ID should be a number like "197951488". Original error: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`
+          );
         } else {
           // For regular spaces, if lookup fails, still try using it directly
           // as it might already be in the correct format
@@ -472,6 +474,28 @@ export async function createConfluencePage(
 
     if (!resolvedSpaceId) {
       throw new Error("Space ID is required. Could not resolve from space key.");
+    }
+
+    // Ensure spaceId is numeric (API requires numeric spaceId, not space keys)
+    // Check if it's already numeric
+    const numericSpaceId = /^\d+$/.test(String(resolvedSpaceId));
+    if (!numericSpaceId && !resolvedSpaceId.startsWith('~')) {
+      // If it's not numeric and not a personal space key, it might be a regular space key
+      // Try to resolve it one more time
+      console.log(`SpaceId "${resolvedSpaceId}" is not numeric. Attempting to resolve as space key.`);
+      try {
+        resolvedSpaceId = await confluenceClient.getSpaceIdByKey(resolvedSpaceId);
+      } catch (resolveError) {
+        throw new Error(
+          `Invalid space identifier "${resolvedSpaceId}". The spaceId must be a numeric value (e.g., "197951488"). If you provided a space key, it could not be resolved to a space ID. Please provide the numeric space ID directly. Error: ${
+            resolveError instanceof Error ? resolveError.message : "Unknown error"
+          }`
+        );
+      }
+    } else if (resolvedSpaceId.startsWith('~')) {
+      throw new Error(
+        `Personal space key "${resolvedSpaceId}" cannot be used directly. The Confluence Cloud API v2 requires a numeric space ID (e.g., "197951488"). Please provide the numeric space ID instead. You can find it by: 1) Opening the space in Confluence and checking the URL, 2) Using the Spaces API, or 3) Creating a test page and checking its spaceId property.`
+      );
     }
 
     const pageData = {

@@ -315,16 +315,45 @@ class ConfluenceClient {
     }
 
     // Set default status if not provided
-    // Ensure spaceId is a string (API may accept both, but we'll use string)
+    // Ensure spaceId is numeric (API requires numeric spaceId)
+    // Convert to number if it's a numeric string, otherwise keep as is for validation
+    let spaceIdValue: string | number = pageData.spaceId;
+    const spaceIdString = String(spaceIdValue);
+    
+    if (typeof spaceIdValue === 'string' && /^\d+$/.test(spaceIdString)) {
+      // It's a numeric string, convert to number (API accepts both but number is preferred)
+      spaceIdValue = parseInt(spaceIdString, 10);
+    } else if (spaceIdString.startsWith('~')) {
+      // Personal space key - cannot be used directly
+      throw new ConfluenceClientError(
+        `Invalid spaceId format: "${spaceIdString}". The spaceId must be numeric (e.g., 197951488 or "197951488"). Personal space keys (starting with ~) cannot be used directly. Please provide the numeric space ID.`,
+        undefined,
+        'VALIDATION_ERROR',
+        'Provide a numeric space ID'
+      );
+    } else if (typeof spaceIdValue === 'string' && !/^\d+$/.test(spaceIdString)) {
+      // It's not numeric - this should have been caught earlier, but throw error here too
+      throw new ConfluenceClientError(
+        `Invalid spaceId format: "${spaceIdString}". The spaceId must be numeric (e.g., 197951488 or "197951488").`,
+        undefined,
+        'VALIDATION_ERROR',
+        'Provide a numeric space ID'
+      );
+    }
+
     const requestData = {
       title: pageData.title,
-      spaceId: String(pageData.spaceId), // Ensure it's a string
+      spaceId: spaceIdValue, // Use numeric value
       status: pageData.status || 'current',
       body: {
         representation: pageData.body.representation || 'storage',
         value: pageData.body.value,
       },
-      ...(pageData.parentId && { parentId: String(pageData.parentId) }),
+      ...(pageData.parentId && { 
+        parentId: typeof pageData.parentId === 'string' && /^\d+$/.test(pageData.parentId)
+          ? parseInt(pageData.parentId, 10)
+          : pageData.parentId 
+      }),
     };
 
     try {
@@ -333,7 +362,6 @@ class ConfluenceClient {
         title: requestData.title,
         spaceId: requestData.spaceId,
         spaceIdType: typeof requestData.spaceId,
-        isPersonalSpace: requestData.spaceId.startsWith('~'),
         status: requestData.status,
         hasBody: !!requestData.body.value,
         bodyLength: requestData.body.value?.length || 0,
