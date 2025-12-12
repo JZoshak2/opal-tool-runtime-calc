@@ -90,16 +90,22 @@ class ConfluenceClient {
     const confluenceBaseUrl = process.env.CONFLUENCE_BASE_URL;
 
     // Support both PAT (Bearer) and Basic Auth (email + API token)
+    // Note: If both are set, PAT takes precedence
     let authHeader: string;
+    let authMethod: string;
+    
     if (confluencePat) {
+      // Personal Access Token uses Bearer auth
       authHeader = `Bearer ${confluencePat}`;
+      authMethod = 'Bearer (PAT)';
     } else if (confluenceEmail && confluenceApiToken) {
-      // Basic Auth: base64 encode email:apiToken
+      // API Token uses Basic auth with email:token
       const credentials = Buffer.from(`${confluenceEmail}:${confluenceApiToken}`).toString('base64');
       authHeader = `Basic ${credentials}`;
+      authMethod = 'Basic (Email/API Token)';
     } else {
       throw new ConfluenceClientError(
-        'Confluence authentication is required. Please set either CONFLUENCE_PAT (Personal Access Token) or both CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN (API token).',
+        'Confluence authentication is required. Please set either CONFLUENCE_PAT (Personal Access Token for Bearer auth) or both CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN (for Basic auth). Note: API tokens are NOT the same as PATs - use CONFLUENCE_API_TOKEN with CONFLUENCE_EMAIL for API tokens.',
         undefined,
         'MISSING_CREDENTIALS',
         'Set CONFLUENCE_PAT for Bearer token auth, or CONFLUENCE_EMAIL + CONFLUENCE_API_TOKEN for Basic auth'
@@ -132,7 +138,10 @@ class ConfluenceClient {
     console.log('Confluence client initialized:', {
       baseUrl: this.baseUrl,
       apiBaseUrl: `${this.baseUrl}/wiki/api/v2`,
-      authType: confluencePat ? 'Bearer (PAT)' : 'Basic (Email/Token)'
+      authType: authMethod,
+      hasPat: !!confluencePat,
+      hasEmail: !!confluenceEmail,
+      hasApiToken: !!confluenceApiToken
     });
 
     // Add response interceptor for error handling
@@ -211,7 +220,21 @@ class ConfluenceClient {
       );
     }
 
-    const response = await this.client.get(`/pages/${pageId}`);
+    // Request body content to be included in the response
+    // Confluence Cloud API v2 requires body to be explicitly requested
+    const response = await this.client.get(`/pages/${pageId}`, {
+      params: {
+        bodyFormat: 'storage' // Request storage format (XHTML)
+      }
+    });
+    
+    // Log the response structure for debugging
+    console.log('Page response structure:', {
+      hasBody: !!response.data.body,
+      bodyKeys: response.data.body ? Object.keys(response.data.body) : [],
+      bodyStructure: response.data.body ? JSON.stringify(response.data.body).substring(0, 200) : 'no body'
+    });
+    
     return response.data;
   }
 
@@ -235,11 +258,13 @@ class ConfluenceClient {
     }
 
     // Search for pages in the space with the given title
+    // Include bodyFormat to get the page content
     const response = await this.client.get('/pages', {
       params: {
         spaceId: spaceId,
         title: title,
         limit: 1,
+        bodyFormat: 'storage' // Request storage format (XHTML)
       }
     });
     
@@ -337,8 +362,8 @@ class ConfluenceClient {
     const spaceIdString = String(spaceIdValue);
     
     if (typeof spaceIdValue === 'string' && /^\d+$/.test(spaceIdString)) {
-      // It's a numeric string, keep as string (API accepts string format based on Postman working example)
-      // Actually, let's try as number first since Postman shows it as number in JSON
+      // It's a numeric string - try as number first (Postman shows number in JSON)
+      // But if that fails, we can try as string
       spaceIdValue = parseInt(spaceIdString, 10);
     } else if (spaceIdString.startsWith('~')) {
       // Personal space key - cannot be used directly

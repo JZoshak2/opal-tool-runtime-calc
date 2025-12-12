@@ -306,8 +306,23 @@ export async function readConfluencePage(
       throw new Error("Invalid parameters: need pageId or spaceId/spaceKey + title");
     }
 
-    // Handle both body.value and body.storage.value formats
-    const content = page.body.value || page.body.storage?.value || "";
+    // Handle different body response formats from Confluence Cloud API v2
+    // The API may return body.storage.value, body.value, or body.atlas_doc_format.value
+    let content = "";
+    if (page.body) {
+      if (page.body.storage && page.body.storage.value) {
+        content = page.body.storage.value;
+      } else if (page.body.value) {
+        content = page.body.value;
+      } else if (page.body.atlas_doc_format && page.body.atlas_doc_format.value) {
+        content = page.body.atlas_doc_format.value;
+      }
+    }
+    
+    // Log for debugging if content is empty
+    if (!content) {
+      console.warn('Page content is empty. Body structure:', JSON.stringify(page.body, null, 2));
+    }
 
     return {
       id: page.id,
