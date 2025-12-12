@@ -332,10 +332,13 @@ class ConfluenceClient {
       console.log('Creating Confluence page with:', {
         title: requestData.title,
         spaceId: requestData.spaceId,
+        spaceIdType: typeof requestData.spaceId,
+        isPersonalSpace: requestData.spaceId.startsWith('~'),
         status: requestData.status,
         hasBody: !!requestData.body.value,
         bodyLength: requestData.body.value?.length || 0,
-        parentId: requestData.parentId || 'none'
+        parentId: requestData.parentId || 'none',
+        endpoint: `${this.baseUrl}/wiki/api/v2/pages`
       });
 
       const response = await this.client.post('/pages', requestData);
@@ -343,31 +346,61 @@ class ConfluenceClient {
     } catch (error: any) {
       // Enhanced error logging for debugging
       if (error instanceof ConfluenceClientError) {
+        // Log full error details for debugging
+        console.error('Confluence API Error Details:', {
+          status: error.status,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          spaceId: pageData.spaceId,
+          isPersonalSpace: pageData.spaceId.startsWith('~'),
+          requestUrl: `${this.baseUrl}/wiki/api/v2/pages`
+        });
+
         // Add request details to error for debugging
         if (error.status === 404) {
           // Check if it's a space not found error
           const errorDetails = error.details || {};
           const errorMessage = errorDetails.message || error.message || '';
+          const fullErrorResponse = errorDetails.fullResponse || errorDetails;
           
-          // Provide more specific error message
-          if (errorMessage.includes('space') || errorMessage.includes('Space')) {
+          // For personal spaces, provide specific guidance
+          if (pageData.spaceId.startsWith('~')) {
             throw new ConfluenceClientError(
-              `Space not found. The spaceId "${pageData.spaceId}" (type: ${typeof pageData.spaceId}) may not exist, may be incorrect, or you may not have access to it. Verify: 1) The space ID is correct (it should be a numeric string or number), 2) You have create permissions for this space, 3) The space exists in your Confluence instance. Original error: ${error.message}`,
+              `Personal space not found or inaccessible. The personal spaceId "${pageData.spaceId}" may not exist, you may not have access to it, or personal spaces might require a different identifier format. Try: 1) Verify you have access to this personal space, 2) Check if you need to use a numeric space ID instead (you can find this in the space URL), 3) Ensure your authentication token has permissions for personal spaces. Full API response: ${JSON.stringify(fullErrorResponse)}`,
               error.status,
               error.code,
               { 
                 ...error.details, 
                 spaceId: pageData.spaceId,
                 spaceIdType: typeof pageData.spaceId,
-                requestUrl: `${this.baseUrl}/wiki/api/v2/pages`
+                isPersonalSpace: true,
+                requestUrl: `${this.baseUrl}/wiki/api/v2/pages`,
+                fullApiResponse: fullErrorResponse
+              }
+            );
+          }
+          
+          // Provide more specific error message
+          if (errorMessage.includes('space') || errorMessage.includes('Space')) {
+            throw new ConfluenceClientError(
+              `Space not found. The spaceId "${pageData.spaceId}" (type: ${typeof pageData.spaceId}) may not exist, may be incorrect, or you may not have access to it. Verify: 1) The space ID is correct (numeric string or number for regular spaces), 2) You have create permissions for this space, 3) The space exists in your Confluence instance. Full API response: ${JSON.stringify(fullErrorResponse)}`,
+              error.status,
+              error.code,
+              { 
+                ...error.details, 
+                spaceId: pageData.spaceId,
+                spaceIdType: typeof pageData.spaceId,
+                requestUrl: `${this.baseUrl}/wiki/api/v2/pages`,
+                fullApiResponse: fullErrorResponse
               }
             );
           }
           throw new ConfluenceClientError(
-            `Resource not found (404). This could mean: 1) The spaceId "${pageData.spaceId}" doesn't exist, 2) You don't have access to create pages in this space, 3) The endpoint is incorrect. Verify the space ID format and permissions. Original error: ${error.message}`,
+            `Resource not found (404). This could mean: 1) The spaceId "${pageData.spaceId}" doesn't exist, 2) You don't have access to create pages in this space, 3) The endpoint is incorrect. Verify the space ID format and permissions. Full API response: ${JSON.stringify(fullErrorResponse)}`,
             error.status,
             error.code,
-            { ...error.details, spaceId: pageData.spaceId }
+            { ...error.details, spaceId: pageData.spaceId, fullApiResponse: fullErrorResponse }
           );
         }
         throw error;
