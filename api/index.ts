@@ -497,18 +497,19 @@ tool({
 • Use descriptive, searchable titles
 • Consider page hierarchy for organization
 • Include proper content structure from start
-• Prefer spaceId over spaceKey for better performance`,
+• Prefer spaceId over spaceKey for better performance
+• Note: Personal spaces (starting with ~) can be used directly as spaceId`,
   parameters: [
     {
       name: "spaceId",
       type: ParameterType.String,
-      description: "The space ID where the page should be created (preferred over spaceKey)",
+      description: "The space ID where the page should be created (preferred over spaceKey). For personal spaces, this may start with '~'.",
       required: false,
     },
     {
       name: "spaceKey",
       type: ParameterType.String,
-      description: "The space key where the page should be created (required if spaceId not provided)",
+      description: "The space key where the page should be created (required if spaceId not provided). If lookup fails, will attempt to use directly as spaceId.",
       required: false,
     },
     {

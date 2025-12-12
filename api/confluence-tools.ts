@@ -455,11 +455,18 @@ export async function createConfluencePage(
       try {
         resolvedSpaceId = await confluenceClient.getSpaceIdByKey(spaceKey);
       } catch (error) {
-        throw new Error(
-          `Failed to resolve space key "${spaceKey}" to space ID. You may need to provide the space ID directly. Error: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
+        // For personal spaces (starting with ~) or if lookup fails,
+        // try using the spaceKey directly as spaceId
+        // Personal spaces in Confluence Cloud may use the key format directly
+        if (spaceKey.startsWith('~')) {
+          console.log(`Space key "${spaceKey}" looks like a personal space. Attempting to use it directly as spaceId.`);
+          resolvedSpaceId = spaceKey;
+        } else {
+          // For regular spaces, if lookup fails, still try using it directly
+          // as it might already be in the correct format
+          console.log(`Space lookup failed for "${spaceKey}". Attempting to use it directly as spaceId.`);
+          resolvedSpaceId = spaceKey;
+        }
       }
     }
 
