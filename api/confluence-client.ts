@@ -222,18 +222,25 @@ class ConfluenceClient {
 
     // Request body content to be included in the response
     // Confluence Cloud API v2 requires body to be explicitly requested
+    // Try with body-format parameter (some APIs use this format)
     const response = await this.client.get(`/pages/${pageId}`, {
       params: {
-        bodyFormat: 'storage' // Request storage format (XHTML)
+        'body-format': 'storage' // Request storage format (XHTML)
       }
     });
     
-    // Log the response structure for debugging
-    console.log('Page response structure:', {
+    // Log the FULL response structure for debugging
+    console.log('Page response structure (full):', JSON.stringify({
       hasBody: !!response.data.body,
       bodyKeys: response.data.body ? Object.keys(response.data.body) : [],
-      bodyStructure: response.data.body ? JSON.stringify(response.data.body).substring(0, 200) : 'no body'
-    });
+      bodyStructure: response.data.body,
+      fullResponseKeys: Object.keys(response.data),
+      sampleResponse: {
+        id: response.data.id,
+        title: response.data.title,
+        body: response.data.body
+      }
+    }, null, 2));
     
     return response.data;
   }

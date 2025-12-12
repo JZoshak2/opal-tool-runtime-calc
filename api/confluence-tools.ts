@@ -309,19 +309,38 @@ export async function readConfluencePage(
     // Handle different body response formats from Confluence Cloud API v2
     // The API may return body.storage.value, body.value, or body.atlas_doc_format.value
     let content = "";
+    
+    // Log the full page structure for debugging
+    console.log('Extracting content from page:', {
+      hasBody: !!page.body,
+      bodyType: typeof page.body,
+      bodyKeys: page.body ? Object.keys(page.body) : [],
+      fullBody: JSON.stringify(page.body, null, 2).substring(0, 500)
+    });
+    
     if (page.body) {
-      if (page.body.storage && page.body.storage.value) {
-        content = page.body.storage.value;
+      // Try different possible structures
+      if (page.body.storage && typeof page.body.storage === 'object') {
+        if (page.body.storage.value) {
+          content = page.body.storage.value;
+        } else if (typeof page.body.storage === 'string') {
+          content = page.body.storage;
+        }
       } else if (page.body.value) {
         content = page.body.value;
       } else if (page.body.atlas_doc_format && page.body.atlas_doc_format.value) {
         content = page.body.atlas_doc_format.value;
+      } else if (typeof page.body === 'string') {
+        // Body might be a string directly
+        content = page.body;
       }
     }
     
     // Log for debugging if content is empty
     if (!content) {
-      console.warn('Page content is empty. Body structure:', JSON.stringify(page.body, null, 2));
+      console.warn('Page content is empty. Full page structure:', JSON.stringify(page, null, 2).substring(0, 1000));
+    } else {
+      console.log('Successfully extracted content, length:', content.length);
     }
 
     return {
