@@ -225,13 +225,12 @@ class ConfluenceClient {
     }
 
     // Request body content to be included in the response
-    // Confluence Cloud API v2 requires body to be explicitly requested
-    // Try with body-format parameter (some APIs use this format)
-    const response = await this.client.get(`/pages/${pageId}`, {
-      params: {
-        'body-format': 'storage' // Request storage format (XHTML)
-      }
-    });
+    // Confluence Cloud API v2 requires body-format parameter
+    // Build URL manually to ensure hyphenated parameter is sent correctly
+    const url = `/pages/${pageId}?body-format=storage`;
+    console.log('Requesting page with URL:', url);
+    
+    const response = await this.client.get(url);
     
     // Log the FULL response structure for debugging
     console.log('Page response structure (full):', JSON.stringify({
@@ -269,15 +268,12 @@ class ConfluenceClient {
     }
 
     // Search for pages in the space with the given title
-    // Include bodyFormat to get the page content
-    const response = await this.client.get('/pages', {
-      params: {
-        spaceId: spaceId,
-        title: title,
-        limit: 1,
-        bodyFormat: 'storage' // Request storage format (XHTML)
-      }
-    });
+    // Include body-format to get the page content
+    // Use URL encoding to ensure the hyphenated parameter is sent correctly
+    const url = `/pages?spaceId=${spaceId}&title=${encodeURIComponent(title)}&limit=1&body-format=storage`;
+    console.log('Searching for page with URL:', url);
+    
+    const response = await this.client.get(url);
     
     if (!response.data.results || response.data.results.length === 0) {
       throw new ConfluenceClientError(
