@@ -107,7 +107,17 @@ class ConfluenceClient {
     }
 
     // Base URL defaults to a cloud instance, but can be overridden
-    this.baseUrl = confluenceBaseUrl || 'https://your-domain.atlassian.net';
+    // Remove trailing slashes and /wiki if present
+    let baseUrl = confluenceBaseUrl || 'https://your-domain.atlassian.net';
+    baseUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+    baseUrl = baseUrl.replace(/\/wiki$/, ''); // Remove /wiki if present
+    
+    this.baseUrl = baseUrl;
+    
+    // Validate base URL format
+    if (!this.baseUrl.includes('atlassian.net') && !this.baseUrl.includes('jira.com')) {
+      console.warn(`Warning: Confluence base URL "${this.baseUrl}" doesn't look like a standard Atlassian Cloud URL. Expected format: https://your-domain.atlassian.net`);
+    }
     
     this.client = axios.create({
       baseURL: `${this.baseUrl}/wiki/api/v2`,
@@ -117,6 +127,12 @@ class ConfluenceClient {
         'Accept': 'application/json',
       },
       timeout: 30000,
+    });
+    
+    console.log('Confluence client initialized:', {
+      baseUrl: this.baseUrl,
+      apiBaseUrl: `${this.baseUrl}/wiki/api/v2`,
+      authType: confluencePat ? 'Bearer (PAT)' : 'Basic (Email/Token)'
     });
 
     // Add response interceptor for error handling
@@ -321,7 +337,8 @@ class ConfluenceClient {
     const spaceIdString = String(spaceIdValue);
     
     if (typeof spaceIdValue === 'string' && /^\d+$/.test(spaceIdString)) {
-      // It's a numeric string, convert to number (API accepts both but number is preferred)
+      // It's a numeric string, keep as string (API accepts string format based on Postman working example)
+      // Actually, let's try as number first since Postman shows it as number in JSON
       spaceIdValue = parseInt(spaceIdString, 10);
     } else if (spaceIdString.startsWith('~')) {
       // Personal space key - cannot be used directly
@@ -341,35 +358,51 @@ class ConfluenceClient {
       );
     }
 
-    const requestData = {
-      title: pageData.title,
-      spaceId: spaceIdValue, // Use numeric value
+    // Build request data exactly as Postman shows it working
+    const requestData: any = {
+      spaceId: spaceIdValue, // Use numeric value (number type)
       status: pageData.status || 'current',
+      title: pageData.title,
       body: {
         representation: pageData.body.representation || 'storage',
         value: pageData.body.value,
       },
-      ...(pageData.parentId && { 
-        parentId: typeof pageData.parentId === 'string' && /^\d+$/.test(pageData.parentId)
-          ? parseInt(pageData.parentId, 10)
-          : pageData.parentId 
-      }),
     };
+    
+    // Only add parentId if provided
+    if (pageData.parentId) {
+      requestData.parentId = typeof pageData.parentId === 'string' && /^\d+$/.test(pageData.parentId)
+        ? parseInt(pageData.parentId, 10)
+        : pageData.parentId;
+    }
 
     try {
       // Log request for debugging (without sensitive content)
-      console.log('Creating Confluence page with:', {
+      const requestPayload = {
         title: requestData.title,
         spaceId: requestData.spaceId,
-        spaceIdType: typeof requestData.spaceId,
         status: requestData.status,
-        hasBody: !!requestData.body.value,
-        bodyLength: requestData.body.value?.length || 0,
-        parentId: requestData.parentId || 'none',
-        endpoint: `${this.baseUrl}/wiki/api/v2/pages`
+        body: {
+          representation: requestData.body.representation,
+          value: requestData.body.value.substring(0, 100) + '...' // Truncate for logging
+        }
+      };
+      
+      console.log('Creating Confluence page - Full request details:', {
+        method: 'POST',
+        url: `${this.baseUrl}/wiki/api/v2/pages`,
+        baseUrl: this.baseUrl,
+        requestPayload: JSON.stringify(requestPayload, null, 2),
+        spaceId: requestData.spaceId,
+        spaceIdType: typeof requestData.spaceId,
+        hasParentId: !!requestData.parentId
       });
 
       const response = await this.client.post('/pages', requestData);
+      console.log('Confluence API Response:', {
+        status: response.status,
+        data: response.data
+      });
       return response.data;
     } catch (error: any) {
       // Enhanced error logging for debugging
